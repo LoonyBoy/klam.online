@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { LandingPage } from './components/LandingPage';
 import { LoginPage } from './components/LoginPage';
+import { Onboarding } from './components/Onboarding';
 import { Dashboard } from './components/Dashboard';
 import { ProjectsList } from './components/ProjectsList';
 import { ProjectCard } from './components/ProjectCard';
@@ -13,7 +14,7 @@ import { Sections } from './components/Sections';
 import { Sidebar } from './components/Sidebar';
 import { mockProjects } from './lib/mockData';
 
-export type Page = 'landing' | 'login' | 'dashboard' | 'projects' | 'project' | 'album' | 'albums-view' | 'users' | 'settings' | 'reports' | 'sections';
+export type Page = 'landing' | 'login' | 'onboarding' | 'dashboard' | 'projects' | 'project' | 'album' | 'albums-view' | 'users' | 'settings' | 'reports' | 'sections';
 
 export interface User {
   id: string;
@@ -78,6 +79,8 @@ export interface Project {
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('landing');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ name: string; telegramUsername?: string; email?: string } | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<'СВОК ПД' | 'СВОК РД'>('СВОК ПД');
@@ -87,12 +90,29 @@ export default function App() {
   };
 
   const handleLogin = () => {
+    // Имитация данных пользователя из Telegram
+    setCurrentUser({
+      name: 'Иван',
+      telegramUsername: '@ivan_petrov',
+      email: 'ivan@example.com'
+    });
+    
+    // После логина показываем онбординг
+    setNeedsOnboarding(true);
+    setCurrentPage('onboarding');
+  };
+
+  const handleOnboardingComplete = (companyId: string) => {
+    console.log('Компания создана/выбрана:', companyId);
     setIsAuthenticated(true);
+    setNeedsOnboarding(false);
     setCurrentPage('dashboard');
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setNeedsOnboarding(false);
+    setCurrentUser(null);
     setCurrentPage('landing');
   };
 
@@ -117,8 +137,20 @@ export default function App() {
   }
 
   // Показываем страницу логина
-  if (!isAuthenticated) {
+  if (!isAuthenticated && currentPage === 'login') {
     return <LoginPage onLogin={handleLogin} />;
+  }
+
+  // Показываем онбординг после логина
+  if (needsOnboarding && currentPage === 'onboarding' && currentUser) {
+    return (
+      <Onboarding
+        userName={currentUser.name}
+        userTelegramUsername={currentUser.telegramUsername}
+        userEmail={currentUser.email}
+        onComplete={handleOnboardingComplete}
+      />
+    );
   }
 
   return (
