@@ -1,7 +1,18 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Button } from './ui/button';
+import { TelegramLoginButton } from './TelegramLoginButton';
 import { Send, FileText, Folder, Clipboard, MessageSquare, File, Archive, FolderOpen, Package, Inbox, FileCheck, PenTool } from 'lucide-react';
+
+interface TelegramUser {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+}
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -10,14 +21,29 @@ interface LoginPageProps {
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleTelegramLogin = () => {
+  const handleTelegramAuth = async (user: TelegramUser) => {
     setIsLoading(true);
     
-    // Симуляция авторизации через Telegram
-    setTimeout(() => {
+    try {
+      console.log('Telegram user data:', user);
+      
+      // TODO: Отправить данные на backend для верификации
+      // const response = await fetch('http://localhost:3001/api/auth/telegram', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(user)
+      // });
+      // const data = await response.json();
+      
+      // Пока просто логиним пользователя
+      setTimeout(() => {
+        setIsLoading(false);
+        onLogin();
+      }, 500);
+    } catch (error) {
+      console.error('Auth error:', error);
       setIsLoading(false);
-      onLogin();
-    }, 1500);
+    }
   };
 
   // Хэштеги для анимации
@@ -282,14 +308,29 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 transition={{ delay: 0.5, duration: 0.6 }}
                 className="space-y-4"
               >
-                <Button
-                  onClick={handleTelegramLogin}
-                  disabled={isLoading}
-                  className="w-full h-14 bg-[#0088cc] hover:bg-[#0077b3] text-white gap-3 text-lg shadow-lg shadow-blue-500/30"
-                >
-                  <MessageSquare className="w-6 h-6" />
-                  {isLoading ? 'Ждем ваш самолётик...' : 'Войти через Telegram'}
-                </Button>
+                {/* Кастомная кнопка для запуска Telegram Login */}
+                <div className="relative">
+                  {!isLoading ? (
+                    <div className="telegram-login-wrapper">
+                      <TelegramLoginButton
+                        botName="klamonline_bot"
+                        buttonSize="large"
+                        cornerRadius={10}
+                        requestAccess={true}
+                        usePic={false}
+                        dataOnauth={handleTelegramAuth}
+                      />
+                    </div>
+                  ) : (
+                    <Button
+                      disabled
+                      className="w-full h-14 bg-[#0088cc] text-white gap-3 text-lg shadow-lg"
+                    >
+                      <MessageSquare className="w-6 h-6 animate-pulse" />
+                      Авторизация...
+                    </Button>
+                  )}
+                </div>
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -302,7 +343,18 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   </div>
                 </div>
 
-                <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
+                <style>{`
+                  .telegram-login-wrapper {
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                  }
+                  .telegram-login-wrapper iframe {
+                    border: none !important;
+                    width: 100% !important;
+                    height: 56px !important;
+                  }
+                `}</style>                <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5">
                       <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
