@@ -4,6 +4,7 @@ import * as projectController from '../controllers/projectController';
 import * as albumController from '../controllers/albumController';
 import * as templateController from '../controllers/templateController';
 import * as userController from '../controllers/userController';
+import * as settingsController from '../controllers/settingsController';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
@@ -20,6 +21,15 @@ router.post('/invitations/:id/decline', companyController.declineInvitation);
 // Получить проекты компании (требует аутентификацию)
 router.get('/:companyId/projects', authenticateToken, projectController.getCompanyProjects);
 
+// Получить детальную информацию о проекте (требует аутентификацию)
+router.get('/:companyId/projects/:projectId', authenticateToken, projectController.getProjectDetails);
+
+// Получить альбомы проекта (требует аутентификацию)
+router.get('/:companyId/projects/:projectId/albums', authenticateToken, albumController.getProjectAlbums);
+
+// Создать новый проект (требует аутентификацию)
+router.post('/:companyId/projects', authenticateToken, projectController.createProject);
+
 // Получить статистику по альбомам компании (требует аутентификацию)
 router.get('/:companyId/albums/statistics', authenticateToken, albumController.getAlbumsStatistics);
 
@@ -28,6 +38,12 @@ router.get('/:companyId/albums/deadlines', authenticateToken, albumController.ge
 
 // Получить последние события по альбомам (требует аутентификацию)
 router.get('/:companyId/albums/events', authenticateToken, albumController.getRecentEvents);
+
+// Получить отфильтрованные события для отчётов (требует аутентификацию)
+router.get('/:companyId/reports/events', authenticateToken, albumController.getFilteredEvents);
+
+// Получить шаблоны альбомов компании (требует аутентификацию)
+router.get('/:companyId/album-templates', authenticateToken, albumController.getAlbumTemplates);
 
 // Получить шаблоны альбомов компании (требует аутентификацию)
 router.get('/:companyId/templates', authenticateToken, templateController.getCompanyTemplates);
@@ -47,10 +63,31 @@ router.get('/:companyId/users', authenticateToken, userController.getCompanyUser
 // Получить статистику по пользователям компании (требует аутентификацию)
 router.get('/:companyId/users/stats', authenticateToken, userController.getCompanyUsersStats);
 
-// Получить данные компании (требует аутентификацию)
-router.get('/:id', authenticateToken, companyController.getCompany);
+// Добавить участника в компанию (требует аутентификацию)
+router.post('/:companyId/participants', authenticateToken, userController.addParticipant);
+
+// Обновить участника компании (требует аутентификацию)
+router.put('/:companyId/participants/:participantId', authenticateToken, userController.updateParticipant);
+
+// Удалить участника из компании (требует аутентификацию)
+router.delete('/:companyId/participants/:participantId', authenticateToken, userController.deleteParticipant);
+
+// Получить профиль текущего пользователя (требует аутентификацию)
+router.get('/:companyId/settings/profile', authenticateToken, settingsController.getUserProfile);
+
+// Обновить профиль текущего пользователя (требует аутентификацию)
+router.put('/:companyId/settings/profile', authenticateToken, settingsController.updateUserProfile);
+
+// Получить настройки компании (требует аутентификацию)
+router.get('/:companyId/settings', authenticateToken, settingsController.getCompanySettings);
+
+// Обновить настройки компании (требует аутентификацию, только owner)
+router.put('/:companyId/settings', authenticateToken, settingsController.updateCompanySettings);
 
 // Создать компанию (требует аутентификацию)
 router.post('/', authenticateToken, companyController.createCompany);
+
+// Получить данные компании (требует аутентификацию) - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ
+router.get('/:id', authenticateToken, companyController.getCompany);
 
 export default router;

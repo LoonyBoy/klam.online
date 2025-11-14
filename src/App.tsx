@@ -12,7 +12,6 @@ import { Settings } from './components/Settings';
 import { Reports } from './components/Reports';
 import { Sections } from './components/Sections';
 import { Sidebar } from './components/Sidebar';
-import { mockProjects } from './lib/mockData';
 
 export type Page = 'landing' | 'login' | 'onboarding' | 'dashboard' | 'projects' | 'project' | 'album' | 'albums-view' | 'users' | 'settings' | 'reports' | 'sections';
 
@@ -82,6 +81,7 @@ export default function App() {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ name: string; telegramUsername?: string; email?: string } | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectName, setSelectedProjectName] = useState<string>('');
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<'СВОК ПД' | 'СВОК РД'>('СВОК ПД');
   const [isTelegramAuthProcessing, setIsTelegramAuthProcessing] = useState(false);
@@ -216,8 +216,9 @@ export default function App() {
     setCurrentPage('album');
   };
 
-  const navigateToAlbumsView = (category: 'СВОК ПД' | 'СВОК РД') => {
+  const navigateToAlbumsView = (category: 'СВОК ПД' | 'СВОК РД', projectName: string) => {
     setSelectedCategory(category);
+    setSelectedProjectName(projectName);
     setCurrentPage('albums-view');
   };
 
@@ -275,7 +276,7 @@ export default function App() {
         {currentPage === 'albums-view' && selectedProjectId && (
           <AlbumsView 
             projectId={selectedProjectId}
-            projectName={mockProjects.find(p => p.id === selectedProjectId)?.name || ''}
+            projectName={selectedProjectName}
             category={selectedCategory}
             onAlbumClick={navigateToAlbum}
             onBack={() => setCurrentPage('project')}

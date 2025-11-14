@@ -6,8 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Plus, Edit, Users as UsersIcon, UserCheck, UserCog, SquarePen } from 'lucide-react';
-import { getCompanyUsers, getCompanyUsersStats } from '../lib/companyApi';
+import { Plus, Edit, Users as UsersIcon, UserCheck, UserCog, Edit2, Trash2 } from 'lucide-react';
+import { getCompanyUsers, getCompanyUsersStats, addParticipant, getDepartments, deleteParticipant, updateParticipant } from '../lib/companyApi';
 
 interface User {
   id: string;
@@ -25,9 +25,16 @@ interface User {
   } | null;
 }
 
+interface Department {
+  id: number;
+  code: string;
+  name: string;
+}
+
 export function Users() {
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState({ totalUsers: 0, executors: 0, customers: 0 });
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<string | null>(null);
@@ -51,9 +58,10 @@ export function Users() {
         return;
       }
 
-      const [usersResponse, statsResponse] = await Promise.all([
+      const [usersResponse, statsResponse, departmentsResponse] = await Promise.all([
         getCompanyUsers(companyId),
-        getCompanyUsersStats(companyId)
+        getCompanyUsersStats(companyId),
+        getDepartments()
       ]);
 
       setUsers(usersResponse.users || []);
@@ -62,6 +70,7 @@ export function Users() {
         executors: statsResponse.executors || 0,
         customers: statsResponse.customers || 0
       });
+      setDepartments(departmentsResponse.departments || []);
     } catch (error) {
       console.error('❌ Failed to load users data:', error);
     } finally {
@@ -69,21 +78,54 @@ export function Users() {
     }
   };
 
-  const handleAddUser = () => {
-    console.log('Добавление пользователя:', {
-      userName,
-      userEmail,
-      userTelegram,
-      userRole,
-      userDepartment
-    });
-    setIsAddUserOpen(false);
-    // Очистка формы
-    setUserName('');
-    setUserEmail('');
-    setUserTelegram('');
-    setUserRole('');
-    setUserDepartment('');
+  const handleAddUser = async () => {
+    if (!userName || !userRole) {
+      alert('Пожалуйста, заполните обязательные поля: ФИО и Роль');
+      return;
+    }
+
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        return;
+      }
+
+      // Разделяем ФИО на имя и фамилию
+      const nameParts = userName.trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      // Находим ID отдела по коду
+      const departmentId = userDepartment 
+        ? departments.find(d => d.code === userDepartment)?.id 
+        : undefined;
+
+      await addParticipant(companyId, {
+        firstName,
+        lastName,
+        telegramUsername: userTelegram || undefined,
+        email: userEmail || undefined,
+        roleType: userRole as 'executor' | 'customer',
+        departmentId
+      });
+
+      console.log('✅ Участник успешно добавлен');
+      setIsAddUserOpen(false);
+      
+      // Очистка формы
+      setUserName('');
+      setUserEmail('');
+      setUserTelegram('');
+      setUserRole('');
+      setUserDepartment('');
+      
+      // Перезагружаем список пользователей
+      await loadData();
+    } catch (error) {
+      console.error('❌ Failed to add participant:', error);
+      alert('Ошибка при добавлении участника');
+    }
   };
 
   const handleEditUser = (userId: string) => {
@@ -98,20 +140,76 @@ export function Users() {
     }
   };
 
-  const handleSaveEdit = () => {
-    console.log('Обновление пользователя:', editingUser, {
-      userName,
-      userEmail,
-      userTelegram,
-      userRole,
-      userDepartment
-    });
-    setEditingUser(null);
-    setUserName('');
-    setUserEmail('');
-    setUserTelegram('');
-    setUserRole('');
-    setUserDepartment('');
+  const handleSaveEdit = async () => {
+    if (!userName || !userRole || !editingUser) {
+      alert('Пожалуйста, заполните обязательные поля: ФИО и Роль');
+      return;
+    }
+
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        return;
+      }
+
+      // Разделяем ФИО на имя и фамилию
+      const nameParts = userName.trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      // Находим ID отдела по коду
+      const departmentId = userDepartment 
+        ? departments.find(d => d.code === userDepartment)?.id 
+        : undefined;
+
+      await updateParticipant(companyId, editingUser, {
+        firstName,
+        lastName,
+        telegramUsername: userTelegram || undefined,
+        email: userEmail || undefined,
+        roleType: userRole as 'executor' | 'customer',
+        departmentId
+      });
+
+      console.log('✅ Участник успешно обновлён');
+      
+      setEditingUser(null);
+      setUserName('');
+      setUserEmail('');
+      setUserTelegram('');
+      setUserRole('');
+      setUserDepartment('');
+      
+      // Перезагружаем список пользователей
+      await loadData();
+    } catch (error) {
+      console.error('❌ Failed to update participant:', error);
+      alert('Ошибка при обновлении участника');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) {
+      return;
+    }
+
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        return;
+      }
+
+      await deleteParticipant(companyId, userId);
+      console.log('✅ Участник успешно удалён');
+      
+      // Перезагружаем список пользователей
+      await loadData();
+    } catch (error) {
+      console.error('❌ Failed to delete participant:', error);
+      alert('Ошибка при удалении участника');
+    }
   };
 
   const getRoleBadgeClass = (roleType: string | null) => {
@@ -201,7 +299,7 @@ export function Users() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="executor">Исполнитель</SelectItem>
-                      <SelectItem value="client">Заказчик</SelectItem>
+                      <SelectItem value="customer">Заказчик</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -212,11 +310,11 @@ export function Users() {
                       <SelectValue placeholder="Выберите отдел" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Архитектура">Архитектура</SelectItem>
-                      <SelectItem value="Конструкции">Конструкции</SelectItem>
-                      <SelectItem value="ОВиК">ОВиК</SelectItem>
-                      <SelectItem value="Электрика">Электрика</SelectItem>
-                      <SelectItem value="Заказчик">Заказчик</SelectItem>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.code}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -302,28 +400,29 @@ export function Users() {
                           <p className="text-xs text-gray-500">{user.email || 'Нет email'}</p>
                         </div>
                       </div>
-                      <Dialog 
-                        open={editingUser === user.id} 
-                        onOpenChange={(open) => {
-                          if (!open) {
-                            setEditingUser(null);
-                            setUserName('');
-                            setUserEmail('');
-                            setUserTelegram('');
-                            setUserRole('');
-                            setUserDepartment('');
-                          }
-                        }}
-                      >
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditUser(user.id)}
-                          >
-                            <SquarePen className="w-4 h-4" />
-                          </Button>
-                        </DialogTrigger>
+                      <div className="flex gap-1">
+                        <Dialog 
+                          open={editingUser === user.id} 
+                          onOpenChange={(open) => {
+                            if (!open) {
+                              setEditingUser(null);
+                              setUserName('');
+                              setUserEmail('');
+                              setUserTelegram('');
+                              setUserRole('');
+                              setUserDepartment('');
+                            }
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditUser(user.id)}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                          </DialogTrigger>
                         <DialogContent className="max-w-[90vw] md:max-w-[425px]">
                           <DialogHeader>
                             <DialogTitle>Редактировать пользователя</DialogTitle>
@@ -376,11 +475,11 @@ export function Users() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="Архитектура">Архитектура</SelectItem>
-                                  <SelectItem value="Конструкции">Конструкции</SelectItem>
-                                  <SelectItem value="ОВиК">ОВиК</SelectItem>
-                                  <SelectItem value="Электрика">Электрика</SelectItem>
-                                  <SelectItem value="Заказчик">Заказчик</SelectItem>
+                                  {departments.map((dept) => (
+                                    <SelectItem key={dept.id} value={dept.code}>
+                                      {dept.name}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                             </div>
@@ -404,6 +503,15 @@ export function Users() {
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                      </div>
                     </div>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center justify-between">
@@ -422,8 +530,6 @@ export function Users() {
                           {user.department?.name || 'Не указан'}
                         </Badge>
                       </div>
-                        <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">{user.department}</Badge>
-                      </div>
                     </div>
                   </div>
                 ))}
@@ -439,7 +545,7 @@ export function Users() {
                       <th className="text-left py-4 px-4 font-semibold text-gray-700">Telegram ID</th>
                       <th className="text-left py-4 px-4 font-semibold text-gray-700">Роль</th>
                       <th className="text-left py-4 px-4 font-semibold text-gray-700">Отдел</th>
-                      <th className="text-left py-4 px-4"></th>
+                      <th className="text-right py-4 px-4 font-semibold text-gray-700">Действия</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -466,6 +572,7 @@ export function Users() {
                           </Badge>
                         </td>
                         <td className="py-4 px-4">
+                          <div className="flex justify-end gap-1">
                           <Dialog 
                             open={editingUser === user.id} 
                             onOpenChange={(open) => {
@@ -483,11 +590,9 @@ export function Users() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={() => handleEditUser(user.id)}
                               >
-                                <SquarePen className="w-4 h-4" />
-                                Изменить
+                                <Edit2 className="w-4 h-4" />
                               </Button>
                             </DialogTrigger>
                             <DialogContent>
@@ -542,11 +647,11 @@ export function Users() {
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="Архитектура">Архитектура</SelectItem>
-                                      <SelectItem value="Конструкции">Конструкции</SelectItem>
-                                      <SelectItem value="ОВиК">ОВиК</SelectItem>
-                                      <SelectItem value="Электрика">Электрика</SelectItem>
-                                      <SelectItem value="Заказчик">Заказчик</SelectItem>
+                                      {departments.map((dept) => (
+                                        <SelectItem key={dept.id} value={dept.code}>
+                                          {dept.name}
+                                        </SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 </div>
@@ -565,10 +670,19 @@ export function Users() {
                                 >
                                   Отмена
                                 </Button>
-                                <Button onClick={handleSaveEdit}>Сохранить</Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
+                              <Button onClick={handleSaveEdit}>Сохранить</Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                        </div>
                         </td>
                       </tr>
                     ))}

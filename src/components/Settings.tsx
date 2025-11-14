@@ -5,105 +5,151 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription } from './ui/alert';
-import { CheckCircle2, Settings as SettingsIcon, MessageSquare, Database, Mail, Building, User, Check } from 'lucide-react';
+import { CheckCircle2, Settings as SettingsIcon, Building, User, Check, AlertCircle, Mail } from 'lucide-react';
+import { getUserProfile, updateUserProfile, getCompanySettings, updateCompanySettings } from '../lib/companyApi';
+import { toast } from 'sonner';
 
 export function Settings() {
+  const companyId = localStorage.getItem('companyId') || '1';
+  
+  const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member'>('member');
+  const [canEditCompany, setCanEditCompany] = useState(false);
 
   // Профиль пользователя
-  const [firstName, setFirstName] = useState('Иван');
-  const [lastName, setLastName] = useState('Иванов');
-  const [position, setPosition] = useState('Главный инженер проекта');
-  const [userEmail, setUserEmail] = useState('ivanov@company.ru');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
 
-  // Исходные значения для отслеживания изменений
-  const [originalProfile, setOriginalProfile] = useState({ firstName: 'Иван', lastName: 'Иванов', position: 'Главный инженер проекта', userEmail: 'ivanov@company.ru' });
-  const [originalCompany, setOriginalCompany] = useState({ companyName: 'ООО "Проектная компания"', companyEmail: 'info@company.ru', companyPhone: '+7 (999) 123-45-67', companyAddress: '' });
-  const [originalStorage, setOriginalStorage] = useState({ driveLink: '', yandexDiskLink: '', shareDiskLink: '' });
-  const [originalEmail, setOriginalEmail] = useState({ emailProvider: 'klam' as 'klam' | 'custom', smtpServer: '', smtpPort: '', smtpUsername: '', smtpPassword: '', emailFrom: '' });
-
-  // Хранилища
-  const [driveLink, setDriveLink] = useState('');
-  const [yandexDiskLink, setYandexDiskLink] = useState('');
-  const [shareDiskLink, setShareDiskLink] = useState('');
+  // Компания
+  const [companyName, setCompanyName] = useState('');
+  const [companyEmail, setCompanyEmail] = useState('');
+  const [companyAddress, setCompanyAddress] = useState('');
 
   // Email настройки
   const [emailProvider, setEmailProvider] = useState<'klam' | 'custom'>('klam');
-  const [smtpServer, setSmtpServer] = useState('');
-  const [smtpPort, setSmtpPort] = useState('');
-  const [smtpUsername, setSmtpUsername] = useState('');
-  const [smtpPassword, setSmtpPassword] = useState('');
-  const [emailFrom, setEmailFrom] = useState('');
 
-  // Компания
-  const [companyName, setCompanyName] = useState('ООО "Проектная компания"');
-  const [companyEmail, setCompanyEmail] = useState('info@company.ru');
-  const [companyPhone, setCompanyPhone] = useState('+7 (999) 123-45-67');
-  const [companyAddress, setCompanyAddress] = useState('');
+  // Исходные значения для отслеживания изменений
+  const [originalProfile, setOriginalProfile] = useState({ firstName: '', lastName: '', userEmail: '' });
+  const [originalCompany, setOriginalCompany] = useState({ 
+    companyName: '', 
+    companyEmail: '', 
+    companyAddress: ''
+  });
 
-  // Проверка изменений в каждом блоке
-  const profileChanged = firstName !== originalProfile.firstName || lastName !== originalProfile.lastName || 
-                         position !== originalProfile.position || userEmail !== originalProfile.userEmail;
-  
-  const companyChanged = companyName !== originalCompany.companyName || companyEmail !== originalCompany.companyEmail || 
-                         companyPhone !== originalCompany.companyPhone || companyAddress !== originalCompany.companyAddress;
-  
-  const storageChanged = driveLink !== originalStorage.driveLink || yandexDiskLink !== originalStorage.yandexDiskLink || 
-                         shareDiskLink !== originalStorage.shareDiskLink;
-  
-  const emailChanged = emailProvider !== originalEmail.emailProvider || smtpServer !== originalEmail.smtpServer || 
-                       smtpPort !== originalEmail.smtpPort || smtpUsername !== originalEmail.smtpUsername || 
-                       smtpPassword !== originalEmail.smtpPassword || emailFrom !== originalEmail.emailFrom;
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, []);
 
-  const saveProfile = () => {
-    setOriginalProfile({ firstName, lastName, position, userEmail });
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
-  };
-
-  const saveCompany = () => {
-    setOriginalCompany({ companyName, companyEmail, companyPhone, companyAddress });
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
-  };
-
-  const saveStorage = () => {
-    setOriginalStorage({ driveLink, yandexDiskLink, shareDiskLink });
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
-  };
-
-  const saveEmail = () => {
-    setOriginalEmail({ emailProvider, smtpServer, smtpPort, smtpUsername, smtpPassword, emailFrom });
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
-  };
-
-  const handleSave = () => {
-    setIsSaving(true);
-    setSaveSuccess(false);
-
-    // Симуляция сохранения
-    setTimeout(() => {
-      setIsSaving(false);
-      setSaveSuccess(true);
+  const loadData = async () => {
+    try {
+      setLoading(true);
       
-      console.log('Сохранение настроек:', {
-        profile: { firstName, lastName, position, userEmail },
-        storage: { driveLink, yandexDiskLink, shareDiskLink },
-        email: { smtpServer, smtpPort, smtpUsername, emailFrom },
-        company: { companyName, companyEmail, companyPhone, companyAddress }
+      // Load user profile and company settings in parallel
+      const [profileData, companyData] = await Promise.all([
+        getUserProfile(companyId),
+        getCompanySettings(companyId)
+      ]);
+
+      // Set user profile
+      setFirstName(profileData.first_name || '');
+      setLastName(profileData.last_name || '');
+      setUserEmail(profileData.email || '');
+      setUserRole(profileData.role_in_company);
+      
+      setOriginalProfile({
+        firstName: profileData.first_name || '',
+        lastName: profileData.last_name || '',
+        userEmail: profileData.email || ''
       });
 
-      // Скрыть сообщение об успехе через 3 секунды
-      setTimeout(() => setSaveSuccess(false), 3000);
-    }, 800);
+      // Set company settings
+      setCompanyName(companyData.name || '');
+      setCompanyEmail(companyData.email || '');
+      setCompanyAddress(companyData.address || '');
+      setCanEditCompany(companyData.canEdit);
+      
+      setOriginalCompany({
+        companyName: companyData.name || '',
+        companyEmail: companyData.email || '',
+        companyAddress: companyData.address || ''
+      });
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      toast.error('Не удалось загрузить настройки');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleTestConnection = (service: string) => {
-    alert(`Тестирование подключения к ${service}...`);
+  // Проверка изменений в каждом блоке
+  const profileChanged = firstName !== originalProfile.firstName || 
+                         lastName !== originalProfile.lastName || 
+                         userEmail !== originalProfile.userEmail;
+  
+  const companyChanged = companyName !== originalCompany.companyName || 
+                         companyEmail !== originalCompany.companyEmail || 
+                         companyAddress !== originalCompany.companyAddress;
+
+  const saveProfile = async () => {
+    try {
+      setIsSaving(true);
+      await updateUserProfile(companyId, {
+        first_name: firstName,
+        last_name: lastName,
+        email: userEmail
+      });
+      
+      setOriginalProfile({ firstName, lastName, userEmail });
+      toast.success('Профиль успешно обновлен');
+    } catch (error: any) {
+      console.error('Error saving profile:', error);
+      toast.error(error.message || 'Не удалось сохранить профиль');
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const saveCompany = async () => {
+    if (!canEditCompany) {
+      toast.error('Только владелец компании может изменять настройки');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await updateCompanySettings(companyId, {
+        name: companyName,
+        email: companyEmail,
+        address: companyAddress
+      });
+      
+      setOriginalCompany({
+        companyName,
+        companyEmail,
+        companyAddress
+      });
+      toast.success('Настройки компании успешно обновлены');
+    } catch (error: any) {
+      console.error('Error saving company settings:', error);
+      toast.error(error.message || 'Не удалось сохранить настройки компании');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-8 max-w-[1200px] mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">Загрузка настроек...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-[1200px] mx-auto">
@@ -173,15 +219,6 @@ export function Settings() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="position">Должность</Label>
-                <Input
-                  id="position"
-                  value={position}
-                  onChange={(e) => setPosition(e.target.value)}
-                  placeholder="Главный инженер проекта"
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="user-email">Электронная почта</Label>
                 <Input
                   id="user-email"
@@ -210,10 +247,11 @@ export function Settings() {
                   </CardDescription>
                 </div>
               </div>
-              {companyChanged && (
+              {companyChanged && canEditCompany && (
                 <Button
                   size="sm"
                   onClick={saveCompany}
+                  disabled={isSaving}
                   className="gap-2 bg-green-600 hover:bg-green-700"
                 >
                   <Check className="w-4 h-4" />
@@ -221,6 +259,14 @@ export function Settings() {
                 </Button>
               )}
             </div>
+            {!canEditCompany && (
+              <Alert className="mt-4 border-amber-200 bg-amber-50">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800 text-xs">
+                  Только владелец компании может изменять эти настройки
+                </AlertDescription>
+              </Alert>
+            )}
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -230,6 +276,7 @@ export function Settings() {
                   id="company-name"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
+                  disabled={!canEditCompany}
                 />
               </div>
               <div className="space-y-2">
@@ -239,14 +286,7 @@ export function Settings() {
                   type="email"
                   value={companyEmail}
                   onChange={(e) => setCompanyEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="company-phone">Телефон</Label>
-                <Input
-                  id="company-phone"
-                  value={companyPhone}
-                  onChange={(e) => setCompanyPhone(e.target.value)}
+                  disabled={!canEditCompany}
                 />
               </div>
             </div>
@@ -258,67 +298,7 @@ export function Settings() {
                 value={companyAddress}
                 onChange={(e) => setCompanyAddress(e.target.value)}
                 rows={2}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Хранилища */}
-        <Card className="border-gray-200 shadow-sm">
-          <CardHeader className="bg-gradient-to-r from-purple-50 to-white border-b">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
-                  <Database className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Хранилища документов</CardTitle>
-                  <CardDescription>
-                    Настройте ссылки на облачные хранилища для проектов
-                  </CardDescription>
-                </div>
-              </div>
-              {storageChanged && (
-                <Button
-                  size="sm"
-                  onClick={saveStorage}
-                  className="gap-2 bg-green-600 hover:bg-green-700"
-                >
-                  <Check className="w-4 h-4" />
-                  Сохранить
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="pt-6 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="drive-link">Google Drive</Label>
-              <Input
-                id="drive-link"
-                type="url"
-                placeholder="https://drive.google.com/drive/folders/..."
-                value={driveLink}
-                onChange={(e) => setDriveLink(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="yandex-link">Яндекс.Диск</Label>
-              <Input
-                id="yandex-link"
-                type="url"
-                placeholder="https://disk.yandex.ru/d/..."
-                value={yandexDiskLink}
-                onChange={(e) => setYandexDiskLink(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="share-link">ShareDisk</Label>
-              <Input
-                id="share-link"
-                type="url"
-                placeholder="https://sharedisk.com/..."
-                value={shareDiskLink}
-                onChange={(e) => setShareDiskLink(e.target.value)}
+                disabled={!canEditCompany}
               />
             </div>
           </CardContent>
@@ -327,28 +307,16 @@ export function Settings() {
         {/* Email уведомления */}
         <Card className="border-gray-200 shadow-sm">
           <CardHeader className="bg-gradient-to-r from-orange-50 to-white border-b">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
-                  <Mail className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Email уведомления</CardTitle>
-                  <CardDescription>
-                    Настройте SMTP для отправки email уведомлений
-                  </CardDescription>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
+                <Mail className="w-5 h-5 text-white" />
               </div>
-              {emailChanged && (
-                <Button
-                  size="sm"
-                  onClick={saveEmail}
-                  className="gap-2 bg-green-600 hover:bg-green-700"
-                >
-                  <Check className="w-4 h-4" />
-                  Сохранить
-                </Button>
-              )}
+              <div>
+                <CardTitle className="text-lg">Email уведомления</CardTitle>
+                <CardDescription>
+                  Настройте SMTP для отправки email уведомлений
+                </CardDescription>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
@@ -387,82 +355,15 @@ export function Settings() {
             </div>
 
             {emailProvider === 'custom' && (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="smtp-server">SMTP сервер</Label>
-                    <Input
-                      id="smtp-server"
-                      placeholder="smtp.gmail.com"
-                      value={smtpServer}
-                      onChange={(e) => setSmtpServer(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="smtp-port">Порт</Label>
-                    <Input
-                      id="smtp-port"
-                      placeholder="587"
-                      value={smtpPort}
-                      onChange={(e) => setSmtpPort(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="smtp-username">Имя пользователя</Label>
-                    <Input
-                      id="smtp-username"
-                      type="email"
-                      placeholder="notifications@company.ru"
-                      value={smtpUsername}
-                      onChange={(e) => setSmtpUsername(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="smtp-password">Пароль</Label>
-                    <Input
-                      id="smtp-password"
-                      type="password"
-                      value={smtpPassword}
-                      onChange={(e) => setSmtpPassword(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email-from">Email отправителя</Label>
-                  <Input
-                    id="email-from"
-                    type="email"
-                    placeholder="noreply@company.ru"
-                    value={emailFrom}
-                    onChange={(e) => setEmailFrom(e.target.value)}
-                  />
-                </div>
-              </>
+              <Alert className="border-amber-200 bg-amber-50">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800 text-sm">
+                  Функция собственного SMTP сервера будет добавлена в следующих версиях
+                </AlertDescription>
+              </Alert>
             )}
-
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="gap-2 hover:bg-orange-50"
-              onClick={() => handleTestConnection('Email')}
-            >
-              <Mail className="w-4 h-4" />
-              Отправить тестовое письмо
-            </Button>
           </CardContent>
         </Card>
-
-        {/* Кнопка сохранения */}
-        <div className="flex justify-end">
-          <Button 
-            onClick={handleSave}
-            disabled={isSaving}
-            className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-          >
-            <SettingsIcon className="w-4 h-4" />
-            {isSaving ? 'Сохранение...' : 'Сохранить настройки'}
-          </Button>
-        </div>
       </div>
     </div>
   );

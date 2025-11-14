@@ -13,6 +13,8 @@ import { testConnection } from './db';
 import authRoutes from './routes/auth';
 import companyRoutes from './routes/companies';
 import dictionaryRoutes from './routes/dictionaries';
+import telegramRoutes from './routes/telegram';
+import { initBot, stopBot } from './bot';
 
 // Load environment variables
 dotenv.config();
@@ -28,10 +30,25 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // Security headers
 app.use(helmet());
 
-// CORS
+// CORS - разрешаем несколько origins
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://waldo-gamic-clark.ngrok-free.dev'
+];
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Разрешаем запросы без origin (например, мобильные приложения или curl)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        console.warn('⚠️ CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );
@@ -77,6 +94,7 @@ app.get('/api', (req: Request, res: Response) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/dictionaries', dictionaryRoutes);
+app.use('/api/telegram', telegramRoutes);
 
 // TODO: Add more API routes here
 // app.use('/api/projects', projectRoutes);
@@ -131,6 +149,9 @@ async function startServer() {
       console.log(`✓ Database: Connected`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('');
+
+      // Инициализируем Telegram бота
+      initBot();
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
@@ -141,11 +162,13 @@ async function startServer() {
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
+  stopBot();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('SIGINT signal received: closing HTTP server');
+  stopBot();
   process.exit(0);
 });
 

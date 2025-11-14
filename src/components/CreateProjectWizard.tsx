@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { mockUsers } from '../lib/mockData';
 import { toast } from 'sonner';
+import { getCompanyParticipants, checkTelegramChannel, createParticipant } from '../lib/companyApi';
 import { 
   Plus, 
   Trash2, 
@@ -32,6 +32,7 @@ interface CreateProjectWizardProps {
   isOpen: boolean;
   onClose: (open: boolean) => void;
   onComplete: (projectData: any) => void;
+  companyId: string;
 }
 
 interface Department {
@@ -42,6 +43,7 @@ interface Department {
 
 interface User {
   id: string;
+  participantId?: number; // ID из таблицы participants, если пользователь из базы
   name: string;
   telegramUsername: string;
   email: string;
@@ -57,21 +59,25 @@ interface Album {
 
 // Предопределенные отделы
 const AVAILABLE_DEPARTMENTS = [
-  { code: 'АР', name: 'Архитектурные решения' },
-  { code: 'КР', name: 'Конструктивные решения' },
-  { code: 'ОВВК', name: 'ОВВК' },
-  { code: 'ЭС', name: 'Электроснабжение' },
-  { code: 'ГП', name: 'Генеральный план' },
-  { code: 'СС', name: 'Сети связи' },
+  { code: 'AR', name: 'Архитектурный отдел' },
+  { code: 'KR', name: 'Конструкторский отдел' },
+  { code: 'OVVK', name: 'Отдел отопления, вентиляции и кондиционирования' },
+  { code: 'ES', name: 'Отдел электроснабжения' },
+  { code: 'GP', name: 'Отдел генерального плана' },
+  { code: 'SS', name: 'Отдел слаботочных систем' },
 ];
 
-export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProjectWizardProps) {
+export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: CreateProjectWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   
   // Шаг 1: Основная информация
   const [projectName, setProjectName] = useState('');
   const [projectCode, setProjectCode] = useState('');
   const [clientCompany, setClientCompany] = useState('');
+
+  // Загрузка участников из базы
+  const [availableParticipants, setAvailableParticipants] = useState<any[]>([]);
+  const [isLoadingParticipants, setIsLoadingParticipants] = useState(false);
 
   // Шаг 2: Отделы
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -91,6 +97,9 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
   const [channelUrl, setChannelUrl] = useState('');
   const [isCheckingConnection, setIsCheckingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [connectionErrorMessage, setConnectionErrorMessage] = useState('');
+  const [connectionChannelTitle, setConnectionChannelTitle] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
 
   // Шаг 5: Альбомы
   const [albumsPD, setAlbumsPD] = useState<Album[]>([]);
@@ -105,6 +114,28 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
     { number: 4, title: 'Telegram бот', icon: MessageSquare },
     { number: 5, title: 'Всё готово', icon: Check },
   ];
+
+  // Загрузить участников компании при открытии визарда
+  const loadParticipants = async () => {
+    setIsLoadingParticipants(true);
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Компания не выбрана');
+        return;
+      }
+
+      const result = await getCompanyParticipants(companyId);
+      if (result.users) {
+        setAvailableParticipants(result.users);
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки участников:', error);
+      toast.error('Не удалось загрузить участников компании');
+    } finally {
+      setIsLoadingParticipants(false);
+    }
+  };
 
   const handleNext = () => {
     if (currentStep < 5) {
@@ -173,52 +204,118 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
   };
 
   // Управление пользователями
-  const addUser = () => {
+    const addUser = async () => {
     if (newUserName.trim() && newUserTelegram.trim() && newUserEmail.trim() && newUserDepartment) {
-      setUsers([
-        ...users,
-        {
-          id: Date.now().toString(),
-          name: newUserName.trim(),
-          telegramUsername: newUserTelegram.trim(),
+      try {
+        // Получаем отдел
+        const department = departments.find(d => d.id === newUserDepartment);
+        if (!department) {
+          toast.error('Отдел не найден');
+          return;
+        }
+
+        // Разбиваем имя на firstName и lastName
+        const nameParts = newUserName.trim().split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        // Создаем участника в базе данных (backend принимает departmentCode, не ID)
+        const result = await createParticipant(companyId, {
+          firstName,
+          lastName,
+          telegramUsername: newUserTelegram.trim().replace('@', ''),
           email: newUserEmail.trim(),
-          departmentId: newUserDepartment,
-          role: newUserRole,
-        },
-      ]);
-      setNewUserName('');
-      setNewUserTelegram('');
-      setNewUserEmail('');
-      setNewUserDepartment('');
-      setNewUserRole('executor');
-      toast.success('Пользователь добавлен');
+          roleType: newUserRole === 'client' ? 'customer' : 'executor',
+          departmentCode: department.code // Используем код отдела
+        });
+
+        // Добавляем пользователя в локальный массив с participantId из БД
+        setUsers([
+          ...users,
+          {
+            id: Date.now().toString(),
+            participantId: result.participantId,
+            name: newUserName.trim(),
+            telegramUsername: newUserTelegram.trim(),
+            email: newUserEmail.trim(),
+            departmentId: newUserDepartment,
+            role: newUserRole,
+          },
+        ]);
+        
+        setNewUserName('');
+        setNewUserTelegram('');
+        setNewUserEmail('');
+        setNewUserDepartment('');
+        setNewUserRole('executor');
+        toast.success('Пользователь добавлен');
+      } catch (error: any) {
+        console.error('Ошибка при создании участника:', error);
+        toast.error(error.message || 'Не удалось создать участника');
+      }
     }
   };
 
   const addExistingUser = () => {
-    if (selectedExistingUserId && existingUserDepartment) {
-      const existingUser = mockUsers.find(u => u.id === selectedExistingUserId);
+    console.log('addExistingUser called', { selectedExistingUserId, availableParticipants });
+    
+    if (selectedExistingUserId) {
+      const existingUser = availableParticipants.find(u => u.id.toString() === selectedExistingUserId);
+      console.log('Found existingUser:', existingUser);
+      
       if (existingUser) {
-        // Проверяем, не добавлен ли уже этот пользователь
-        const alreadyAdded = users.some(u => u.email === existingUser.email);
+        // Проверяем, не добавлен ли уже этот пользователь по participantId
+        const alreadyAdded = users.some(u => u.participantId === existingUser.id);
+        console.log('Already added check:', alreadyAdded);
+        
         if (alreadyAdded) {
           toast.error('Этот пользователь уже добавлен в проект');
           return;
         }
 
+        // Проверяем, что у пользователя есть отдел
+        console.log('User department:', existingUser.department);
+        
+        if (!existingUser.department) {
+          toast.error('У этого пользователя не указан отдел в базе данных');
+          return;
+        }
+
+        // Проверяем, что отдел пользователя добавлен в проект, если нет - добавляем автоматически
+        console.log('Current departments:', departments);
+        console.log('Departments detail:', departments.map(d => ({ id: d.id, code: d.code, name: d.name })));
+        console.log('Looking for department with code:', existingUser.department.code);
+        
+        let userDeptInProject = departments.find(d => d.code === existingUser.department.code);
+        console.log('Department in project:', userDeptInProject);
+        
+        if (!userDeptInProject) {
+          // Автоматически добавляем отдел пользователя в проект
+          const newDept = {
+            id: Date.now().toString(),
+            name: existingUser.department.name,
+            code: existingUser.department.code,
+          };
+          setDepartments([...departments, newDept]);
+          userDeptInProject = newDept;
+          console.log('Auto-added department:', newDept);
+          toast.info(`Отдел "${existingUser.department.name}" автоматически добавлен в проект`);
+        }
+
+        const fullName = `${existingUser.firstName || ''} ${existingUser.lastName || ''}`.trim();
         setUsers([
           ...users,
           {
             id: Date.now().toString(),
-            name: existingUser.name,
-            telegramUsername: existingUser.telegramId,
+            participantId: existingUser.id, // Сохраняем ID из таблицы participants
+            name: fullName,
+            telegramUsername: existingUser.telegramUsername || '',
             email: existingUser.email,
-            departmentId: existingUserDepartment,
-            role: existingUser.role,
+            departmentId: userDeptInProject.id,
+            role: existingUser.roleType === 'customer' ? 'client' : 'executor',
           },
         ]);
         setSelectedExistingUserId('');
-        setExistingUserDepartment('');
         toast.success('Пользователь добавлен из базы');
       }
     }
@@ -278,12 +375,14 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
 
   const copyBotUsername = async () => {
     try {
-      await navigator.clipboard.writeText('@klambot');
+      await navigator.clipboard.writeText('@klamonline_bot');
       toast.success('Username бота скопирован в буфер обмена');
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 4000);
     } catch (error) {
       // Fallback для случаев, когда Clipboard API недоступен
       const textArea = document.createElement('textarea');
-      textArea.value = '@klambot';
+      textArea.value = '@klamonline_bot';
       textArea.style.position = 'fixed';
       textArea.style.left = '-999999px';
       textArea.style.top = '-999999px';
@@ -294,37 +393,71 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
         document.execCommand('copy');
         textArea.remove();
         toast.success('Username бота скопирован в буфер обмена');
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 4000);
       } catch (err) {
         textArea.remove();
-        toast.info('@klambot - скопируйте вручную');
+        toast.info('@klamonline_bot - скопируйте вручную');
       }
     }
   };
 
   const checkConnection = async () => {
     if (!channelUrl.trim()) {
-      toast.error('Введите URL канала');
+      toast.error('Введите URL канала или ID беседы');
       return;
     }
 
     setIsCheckingConnection(true);
     setConnectionStatus('idle');
+    
+    // Очищаем все предыдущие toast'ы
+    toast.dismiss();
 
-    // Имитация проверки соединения (замените на реальный API вызов)
-    setTimeout(() => {
-      // Простая валидация URL
-      const isTelegramUrl = channelUrl.includes('t.me/');
+    try {
+      // Реальная проверка через Telegram Bot API
+      const result = await checkTelegramChannel(channelUrl);
       
-      if (isTelegramUrl) {
+      console.log('Результат проверки канала:', result);
+      
+      if (result.success) {
         setConnectionStatus('success');
-        toast.success('Соединение с ботом установлено!');
+        
+        // Если есть предупреждение (бот не админ), показываем его
+        if (result.warning) {
+          toast.warning(result.warning, {
+            duration: 6000,
+          });
+        } else {
+          toast.success(`Соединение установлено! Канал: ${result.channel.title}`);
+        }
       } else {
         setConnectionStatus('error');
-        toast.error('Некорректный URL канала Telegram');
+        
+        // Если бот не является администратором
+        if (result.needsAdmin) {
+          const errorMsg = result.message || 'Пожалуйста, сделайте бота администратором канала и нажмите "Проверить соединение" снова';
+          const channelTitle = result.channel?.title || 'Неизвестно';
+          setConnectionErrorMessage(errorMsg);
+          setConnectionChannelTitle(channelTitle);
+          toast.error(`${errorMsg}\n\nКанал: ${channelTitle}`, { duration: 8000 });
+        } else {
+          const errorMsg = result.error || 'Не удалось проверить канал';
+          setConnectionErrorMessage(errorMsg);
+          setConnectionChannelTitle('');
+          toast.error(errorMsg);
+        }
       }
-      
+    } catch (error: any) {
+      console.error('Ошибка проверки канала (catch):', error);
+      const errorMsg = 'Не удалось установить соединение. Проверьте правильность URL и убедитесь, что бот добавлен в канал.';
+      setConnectionStatus('error');
+      setConnectionErrorMessage(errorMsg);
+      setConnectionChannelTitle('');
+      toast.error(errorMsg);
+    } finally {
       setIsCheckingConnection(false);
-    }, 2000);
+    }
   };
 
   return (
@@ -421,12 +554,20 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
                 <div className="flex gap-2">
                   <Select value={selectedDepartmentCode} onValueChange={setSelectedDepartmentCode}>
                     <SelectTrigger id="department-code" className="flex-1">
-                      <SelectValue placeholder="Выберите отдел" />
+                      <SelectValue placeholder="Выберите отдел">
+                        {selectedDepartmentCode && (
+                          <span className="truncate">
+                            {AVAILABLE_DEPARTMENTS.find(d => d.code === selectedDepartmentCode)?.code || ''}
+                          </span>
+                        )}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {AVAILABLE_DEPARTMENTS.map((dept) => (
+                      {AVAILABLE_DEPARTMENTS.filter(
+                        dept => !departments.some(d => d.code === dept.code)
+                      ).map((dept) => (
                         <SelectItem key={dept.code} value={dept.code}>
-                          <span className="truncate">{dept.name} ({dept.code})</span>
+                          {dept.name} ({dept.code})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -573,50 +714,54 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
                       <div className="space-y-4 p-4 bg-gray-50 rounded-lg border">
                         <h3 className="font-medium">Добавить пользователя из базы</h3>
                         
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="existing-user">Пользователь</Label>
-                            <Select value={selectedExistingUserId} onValueChange={setSelectedExistingUserId}>
+                        <div className="space-y-2">
+                          <Label htmlFor="existing-user">Пользователь</Label>
+                            <Select 
+                              value={selectedExistingUserId} 
+                              onValueChange={setSelectedExistingUserId}
+                              onOpenChange={(open) => {
+                                if (open && availableParticipants.length === 0 && !isLoadingParticipants) {
+                                  loadParticipants();
+                                }
+                              }}
+                            >
                               <SelectTrigger id="existing-user">
-                                <SelectValue placeholder="Выберите пользователя" />
+                                <SelectValue placeholder={isLoadingParticipants ? "Загрузка..." : "Выберите пользователя"} />
                               </SelectTrigger>
                               <SelectContent>
-                                {mockUsers.map((user) => (
-                                  <SelectItem key={user.id} value={user.id}>
-                                    {user.name} ({user.role === 'executor' ? 'Исполнитель' : 'Заказчик'})
+                                {isLoadingParticipants ? (
+                                  <SelectItem value="loading" disabled>
+                                    Загрузка участников...
                                   </SelectItem>
-                                ))}
+                                ) : availableParticipants.filter(user => !users.some(u => u.participantId === user.id)).length === 0 ? (
+                                  <SelectItem value="empty" disabled>
+                                    Нет доступных участников
+                                  </SelectItem>
+                                ) : (
+                                  availableParticipants
+                                    .filter(user => !users.some(u => u.participantId === user.id))
+                                    .map((user) => (
+                                      <SelectItem key={user.id} value={user.id.toString()}>
+                                        {user.firstName} {user.lastName} ({user.roleType === 'executor' ? 'Исполнитель' : 'Заказчик'})
+                                      </SelectItem>
+                                    ))
+                                )}
                               </SelectContent>
                             </Select>
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label htmlFor="existing-user-department">Отдел в проекте</Label>
-                            <Select value={existingUserDepartment} onValueChange={setExistingUserDepartment}>
-                              <SelectTrigger id="existing-user-department">
-                                <SelectValue placeholder="Выберите отдел" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {departments.map((dept) => (
-                                  <SelectItem key={dept.id} value={dept.id}>
-                                    {dept.name} ({dept.code})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
                         </div>
 
                         {selectedExistingUserId && (
                           <div className="p-3 bg-blue-50 rounded border border-blue-200">
                             <p className="text-sm font-medium text-blue-900 mb-2">Информация о пользователе:</p>
                             {(() => {
-                              const user = mockUsers.find(u => u.id === selectedExistingUserId);
+                              const user = availableParticipants.find(u => u.id.toString() === selectedExistingUserId);
                               return user ? (
                                 <div className="text-sm text-blue-800 space-y-1">
-                                  <p><strong>Email:</strong> {user.email}</p>
-                                  <p><strong>Telegram:</strong> {user.telegramId}</p>
-                                  <p><strong>Отдел:</strong> {user.department}</p>
+                                  <p><strong>Email:</strong> {user.email || 'Не указан'}</p>
+                                  <p><strong>Telegram:</strong> {user.telegramUsername || 'Не указан'}</p>
+                                  {user.department && (
+                                    <p><strong>Отдел:</strong> {user.department.name} ({user.department.code})</p>
+                                  )}
                                 </div>
                               ) : null;
                             })()}
@@ -626,7 +771,7 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
                         <Button 
                           onClick={addExistingUser} 
                           className="w-full gap-2"
-                          disabled={!selectedExistingUserId || !existingUserDepartment}
+                          disabled={!selectedExistingUserId}
                         >
                           <UserPlus className="w-4 h-4" />
                           Добавить из базы
@@ -692,7 +837,7 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
                   <p className="font-medium mb-2">Инструкция по подключению бота:</p>
                   <ol className="list-decimal list-inside space-y-1 text-sm">
                     <li>Создайте канал в Telegram для проекта</li>
-                    <li>Пригласите бота <strong>@klambot</strong> в канал</li>
+                    <li>Пригласите бота <strong>@klamonline_bot</strong> в канал</li>
                     <li>Сделайте бота администратором канала</li>
                     <li>Скопируйте URL-ссылку канала и вставьте ниже</li>
                   </ol>
@@ -703,7 +848,7 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-700 mb-1">Username бота</p>
-                    <p className="text-lg font-mono font-semibold text-gray-900">@klambot</p>
+                    <p className="text-lg font-mono font-semibold text-gray-900">@klamonline_bot</p>
                   </div>
                   <Button
                     variant="outline"
@@ -711,24 +856,33 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
                     onClick={copyBotUsername}
                     className="gap-2 shrink-0"
                   >
-                    <Copy className="w-4 h-4" />
-                    Скопировать
+                    {isCopied ? (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        Скопировано!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Скопировать
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="channel-url">
-                  URL-ссылка на канал <span className="text-red-500">*</span>
+                  URL-ссылка на канал или ID беседы <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="channel-url"
-                  placeholder="https://t.me/your_channel"
+                  placeholder="https://t.me/your_channel или -5078073427"
                   value={channelUrl}
                   onChange={(e) => setChannelUrl(e.target.value)}
                 />
                 <p className="text-xs text-gray-500">
-                  Пример: https://t.me/project_channel или https://t.me/+AbCdEfGhIjK
+                  Пример: https://t.me/project_channel, https://web.telegram.org/a/#-5078073427 или просто -5078073427
                 </p>
               </div>
 
@@ -776,7 +930,10 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
                   <Alert className="bg-red-50 border-red-200">
                     <XCircle className="w-4 h-4 text-red-600" />
                     <AlertDescription className="text-red-900">
-                      Не удалось установить соединение. Проверьте правильность URL и убедитесь, что бот добавлен в канал.
+                      {connectionErrorMessage}
+                      {connectionChannelTitle && (
+                        <div className="mt-2 font-medium">Канал: {connectionChannelTitle}</div>
+                      )}
                     </AlertDescription>
                   </Alert>
                 )}
@@ -844,7 +1001,7 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete }: CreateProje
           <Button
             variant="outline"
             onClick={handlePrevious}
-            disabled={currentStep === 1 || currentStep === 5}
+            disabled={currentStep === 1}
             className="gap-2"
           >
             <ChevronLeft className="w-4 h-4" />

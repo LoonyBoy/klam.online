@@ -376,7 +376,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                         botName="klamonline_bot"
                         buttonSize="large"
                         cornerRadius={10}
-                        requestAccess={true}
+                        requestAccess={false}
                         usePic={false}
                         dataOnauth={handleTelegramAuth}
                         dataAuthUrl={`${window.location.origin}/auth/telegram`}

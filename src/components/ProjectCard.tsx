@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -14,38 +14,40 @@ import {
   Calendar, 
   User, 
   Building2, 
-  MapPin, 
   Users as UsersIcon,
   Mail,
   Send,
-  Briefcase,
   Plus,
   Trash2
 } from 'lucide-react';
-import { mockProjects, mockAlbums, mockEvents } from '../lib/mockData';
-import { AlbumsTable } from './AlbumsTable';
+import { mockAlbums, mockEvents } from '../lib/mockData';
 import { User as UserType } from '../App';
 import { toast } from 'sonner';
+import { companyApi } from '../lib/companyApi';
 
 interface ProjectCardProps {
   projectId: string;
   onNavigateToAlbum: (albumId: string) => void;
-  onNavigateToAlbumsView: (category: 'СВОК ПД' | 'СВОК РД') => void;
+  onNavigateToAlbumsView: (category: 'СВОК ПД' | 'СВОК РД', projectName: string) => void;
   onBack: () => void;
 }
 
-export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsView, onBack }: ProjectCardProps) {
-  const project = mockProjects.find(p => p.id === projectId);
+export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: ProjectCardProps) {
+  // Состояние для загрузки данных из API
+  const [project, setProject] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Временно используем моковые данные для альбомов и событий
   const projectAlbums = mockAlbums.filter(a => a.projectId === projectId);
   const projectEvents = mockEvents.filter(e => e.projectId === projectId).slice(0, 8);
   
-  // Состояния для отображения категорий
-  const [selectedCategory, setSelectedCategory] = useState<'СВОК ПД' | 'СВОК РД' | null>('СВОК ПД');
-  const [isExpanded, setIsExpanded] = useState(false);
-
+  // Фильтрация альбомов по категории
+  const pdAlbums = projectAlbums.filter(a => a.category === 'СВОК ПД');
+  const rdAlbums = projectAlbums.filter(a => a.category === 'СВОК РД');
+  
   // Состояния для управления пользователями
-  const [executors, setExecutors] = useState<UserType[]>(project?.projectUsers?.executors || []);
-  const [clients, setClients] = useState<UserType[]>(project?.projectUsers?.clients || []);
+  const [executors, setExecutors] = useState<UserType[]>([]);
+  const [clients, setClients] = useState<UserType[]>([]);
   
   // Состояния для диалогов добавления пользователей
   const [isAddExecutorOpen, setIsAddExecutorOpen] = useState(false);
@@ -57,6 +59,51 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
   const [newUserTelegram, setNewUserTelegram] = useState('');
   const [newUserDepartment, setNewUserDepartment] = useState('');
 
+  // Загрузка данных проекта при монтировании компонента
+  useEffect(() => {
+    loadProjectDetails();
+  }, [projectId]);
+
+  const loadProjectDetails = async () => {
+    try {
+      setIsLoading(true);
+      const companyId = localStorage.getItem('companyId');
+      
+      if (!companyId) {
+        toast.error('Не удалось определить компанию');
+        setIsLoading(false);
+        return;
+      }
+
+      const response = await companyApi.getProjectDetails(companyId, projectId);
+      
+      console.log('🔍 Project details response:', response);
+      console.log('🔍 Executors:', response.project?.participants?.executors);
+      console.log('🔍 Clients:', response.project?.participants?.clients);
+      
+      if (response.success && response.project) {
+        setProject(response.project);
+        setExecutors(response.project.participants?.executors || []);
+        setClients(response.project.participants?.clients || []);
+      } else {
+        toast.error('Не удалось загрузить данные проекта');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load project details:', error);
+      toast.error('Ошибка при загрузке проекта');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-8">
+        <p>Загрузка данных проекта...</p>
+      </div>
+    );
+  }
+
   if (!project) {
     return (
       <div className="p-8">
@@ -64,23 +111,6 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
       </div>
     );
   }
-
-  // Фильтрация альбомов по категории
-  const pdAlbums = projectAlbums.filter(a => a.category === 'СВОК ПД');
-  const rdAlbums = projectAlbums.filter(a => a.category === 'СВОК РД');
-  
-  const displayedAlbums = selectedCategory 
-    ? projectAlbums.filter(a => a.category === selectedCategory)
-    : [];
-
-  const handleCategoryToggle = (category: 'СВОК ПД' | 'СВОК РД') => {
-    if (selectedCategory === category) {
-      setIsExpanded(!isExpanded);
-    } else {
-      setSelectedCategory(category);
-      setIsExpanded(false);
-    }
-  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -95,16 +125,6 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
       hour: '2-digit',
       minute: '2-digit'
     });
-  };
-
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case 'В работе': return 'default';
-      case 'На проверке': return 'default';
-      case 'Принято': return 'default';
-      case 'Замечания': return 'destructive';
-      default: return 'default';
-    }
   };
 
   const getEventBadgeVariant = (type: string) => {
@@ -175,7 +195,7 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
     setNewUserDepartment('');
   };
 
-  const departments = project.departments || ['Архитектура', 'Конструкции', 'ОВиК', 'ВК', 'ЭОМ'];
+  const departments = project.departments?.map((d: any) => d.name) || [];
 
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
@@ -191,18 +211,12 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <Badge variant={project.status === 'Активный' ? 'default' : 'destructive'} className="text-xs">
-                {project.status}
+              <Badge variant="default" className="text-xs">
+                Активный
               </Badge>
               <span className="text-sm text-gray-600 font-mono">{project.code}</span>
             </div>
             <h1 className="text-gray-900 mb-2">{project.name}</h1>
-            {project.address && (
-              <div className="flex items-center gap-2 text-gray-600">
-                <MapPin className="w-4 h-4" />
-                <span className="text-sm">{project.address}</span>
-              </div>
-            )}
           </div>
         </div>
         
@@ -213,15 +227,15 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
               <User className="w-4 h-4" />
               <span className="text-xs">Заказчик</span>
             </div>
-            <p className="text-sm font-medium text-gray-900">{project.client}</p>
+            <p className="text-sm font-medium text-gray-900">{project.customerCompanyName || 'Не указан'}</p>
           </div>
           
           <div className="bg-white rounded-lg p-3 border border-gray-200">
             <div className="flex items-center gap-2 text-gray-500 mb-1">
               <Calendar className="w-4 h-4" />
-              <span className="text-xs">Дедлайн</span>
+              <span className="text-xs">Создан</span>
             </div>
-            <p className="text-sm font-medium text-gray-900">{formatDate(project.deadline)}</p>
+            <p className="text-sm font-medium text-gray-900">{formatDate(project.createdAt)}</p>
           </div>
         </div>
 
@@ -233,9 +247,9 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
               <span className="text-xs">Задействованные отделы</span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {project.departments.map((dept, index) => (
+              {project.departments.map((dept: any, index: number) => (
                 <Badge key={index} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                  {dept}
+                  {dept.name}
                 </Badge>
               ))}
             </div>
@@ -243,21 +257,13 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
         )}
         
         {/* Ссылки */}
-        {(project.telegramLink || project.driveLink) && (
+        {project.telegramChannel && (
           <div className="flex gap-2">
-            {project.telegramLink && (
+            {project.telegramChannel.inviteLink && (
               <Button variant="outline" size="sm" className="gap-2 bg-white hover:bg-blue-50 border-gray-300" asChild>
-                <a href={project.telegramLink} target="_blank" rel="noopener noreferrer">
+                <a href={project.telegramChannel.inviteLink} target="_blank" rel="noopener noreferrer">
                   <MessageSquare className="w-4 h-4" />
                   Telegram канал
-                </a>
-              </Button>
-            )}
-            {project.driveLink && (
-              <Button variant="outline" size="sm" className="gap-2 bg-white hover:bg-blue-50 border-gray-300" asChild>
-                <a href={project.driveLink} target="_blank" rel="noopener noreferrer">
-                  <FolderOpen className="w-4 h-4" />
-                  Облачное хранилище
                 </a>
               </Button>
             )}
@@ -451,7 +457,7 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
                   <SelectValue placeholder="Выберите отдел" />
                 </SelectTrigger>
                 <SelectContent>
-                  {departments.map((dept) => (
+                  {departments.map((dept: string) => (
                     <SelectItem key={dept} value={dept}>{dept}</SelectItem>
                   ))}
                 </SelectContent>
@@ -531,61 +537,51 @@ export function ProjectCard({ projectId, onNavigateToAlbum, onNavigateToAlbumsVi
       {/* Альбомы - упрощенный дизайн */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Альбомы проекта</h2>
-        {projectAlbums.length === 0 ? (
-          <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white mb-4 shadow-sm">
-              <FolderOpen className="w-8 h-8 text-gray-400" />
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            onClick={() => onNavigateToAlbumsView('СВОК ПД', project?.name || '')}
+            className="group bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-400 hover:shadow-md transition-all text-left"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                  <FolderOpen className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">СВОК ПД</h3>
+                  <p className="text-xs text-gray-500">Проектная документация</p>
+                </div>
+              </div>
+              <ExternalLink className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
             </div>
-            <p className="text-gray-600 mb-1">Нет альбомов</p>
-            <p className="text-sm text-gray-400">Альбомы добавляются в таблице при просмотре категории</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              onClick={() => onNavigateToAlbumsView('СВОК ПД')}
-              className="group bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-400 hover:shadow-md transition-all text-left"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                    <FolderOpen className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">СВОК ПД</h3>
-                    <p className="text-xs text-gray-500">Проектная документация</p>
-                  </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-gray-900">{pdAlbums.length}</span>
+              <span className="text-sm text-gray-500">альбомов</span>
+            </div>
+          </button>
+          
+          <button
+            onClick={() => onNavigateToAlbumsView('СВОК РД', project?.name || '')}
+            className="group bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-400 hover:shadow-md transition-all text-left"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center group-hover:bg-indigo-200 transition-colors">
+                  <FolderOpen className="w-5 h-5 text-indigo-600" />
                 </div>
-                <ExternalLink className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-gray-900">{pdAlbums.length}</span>
-                <span className="text-sm text-gray-500">альбомов</span>
-              </div>
-            </button>
-            
-            <button
-              onClick={() => onNavigateToAlbumsView('СВОК РД')}
-              className="group bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-400 hover:shadow-md transition-all text-left"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center group-hover:bg-indigo-200 transition-colors">
-                    <FolderOpen className="w-5 h-5 text-indigo-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">СВОК РД</h3>
-                    <p className="text-xs text-gray-500">Рабочая документация</p>
-                  </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">СВОК РД</h3>
+                  <p className="text-xs text-gray-500">Рабочая документация</p>
                 </div>
-                <ExternalLink className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-gray-900">{rdAlbums.length}</span>
-                <span className="text-sm text-gray-500">альбомов</span>
-              </div>
-            </button>
-          </div>
-        )}
+              <ExternalLink className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-gray-900">{rdAlbums.length}</span>
+              <span className="text-sm text-gray-500">альбомов</span>
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* История событий - компактный дизайн */}

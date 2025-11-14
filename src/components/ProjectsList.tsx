@@ -6,7 +6,8 @@ import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Plus, Search, Filter, FolderKanban, TrendingUp, ExternalLink } from 'lucide-react';
 import { CreateProjectWizard } from './CreateProjectWizard';
-import { companyApi } from '../lib/companyApi';
+import { companyApi, createProject } from '../lib/companyApi';
+import { toast } from 'sonner';
 
 interface ProjectsListProps {
   onNavigateToProject: (projectId: string) => void;
@@ -62,9 +63,29 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
   const uniqueDepartments = new Set<string>();
   // TODO: когда будет связь с departments, подсчитывать уникальные отделы
 
-  const handleProjectComplete = (projectData: any) => {
+  const handleProjectComplete = async (projectData: any) => {
     console.log('Создан новый проект:', projectData);
-    loadProjects(); // Перезагружаем список проектов
+    
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Компания не выбрана');
+        return;
+      }
+
+      // Вызываем API для создания проекта
+      const result = await createProject(companyId, projectData);
+      
+      if (result.success) {
+        toast.success(`Проект "${projectData.projectName}" успешно создан!`);
+        loadProjects(); // Перезагружаем список проектов
+      } else {
+        toast.error('Не удалось создать проект');
+      }
+    } catch (error) {
+      console.error('Ошибка при создании проекта:', error);
+      toast.error(error instanceof Error ? error.message : 'Не удалось создать проект');
+    }
   };
 
   if (isLoading) {
@@ -307,7 +328,8 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
       <CreateProjectWizard 
         isOpen={isWizardOpen} 
         onClose={() => setIsWizardOpen(false)} 
-        onComplete={handleProjectComplete} 
+        onComplete={handleProjectComplete}
+        companyId={localStorage.getItem('companyId') || '1'}
       />
     </div>
   );

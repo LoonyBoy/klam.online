@@ -1,7 +1,9 @@
+import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { ArrowLeft } from 'lucide-react';
-import { mockAlbums } from '../lib/mockData';
 import { AlbumsTable } from './AlbumsTable';
+import { companyApi } from '../lib/companyApi';
+import { toast } from 'sonner';
 
 interface AlbumsViewProps {
   projectId: string;
@@ -18,8 +20,61 @@ export function AlbumsView({
   onBack, 
   onAlbumClick 
 }: AlbumsViewProps) {
-  const projectAlbums = mockAlbums
-    .filter(a => a.projectId === projectId && a.category === category);
+  const [albums, setAlbums] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAddingAlbum, setIsAddingAlbum] = useState(false);
+
+  useEffect(() => {
+    loadAlbums();
+  }, [projectId, category]);
+
+  const loadAlbums = async () => {
+    try {
+      setIsLoading(true);
+      const companyId = localStorage.getItem('companyId');
+      
+      if (!companyId) {
+        toast.error('Не удалось определить компанию');
+        setIsLoading(false);
+        return;
+      }
+
+      const response = await companyApi.getProjectAlbums(companyId, projectId, category);
+      
+      if (response.success) {
+        setAlbums(response.albums || []);
+      } else {
+        toast.error('Не удалось загрузить альбомы');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load albums:', error);
+      toast.error('Ошибка при загрузке альбомов');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddAlbum = () => {
+    // Этот обработчик вызовется при клике на кнопку "Создать альбом"
+    // Форма быстрого добавления будет показана автоматически через состояние таблицы
+    setIsAddingAlbum(true);
+  };
+
+  const handleQuickAdd = async (albumData: any) => {
+    try {
+      console.log('Quick add album:', albumData);
+      toast.info('Функция добавления альбома будет реализована позже');
+      // TODO: Implement API call to create album
+      // const companyId = localStorage.getItem('companyId');
+      // await companyApi.createAlbum(companyId, projectId, albumData);
+      // await loadAlbums();
+    } catch (error) {
+      console.error('Failed to add album:', error);
+      toast.error('Ошибка при добавлении альбома');
+    } finally {
+      setIsAddingAlbum(false);
+    }
+  };
 
   return (
     <div className="p-4 md:p-8 min-h-screen bg-gray-50">
@@ -41,9 +96,14 @@ export function AlbumsView({
       {/* Таблица альбомов в полном размере */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <AlbumsTable
-          albums={projectAlbums}
+          albums={albums}
           onAlbumClick={onAlbumClick}
+          onAddAlbum={handleAddAlbum}
+          onQuickAdd={handleQuickAdd}
           isExpanded={true}
+          isLoading={isLoading}
+          companyId={localStorage.getItem('companyId') || ''}
+          projectId={projectId}
         />
       </div>
     </div>

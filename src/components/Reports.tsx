@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Download, Filter, FileText, Bell, Calendar, TrendingUp } from 'lucide-react';
-import { mockEvents, mockProjects, mockAlbums, mockUsers } from '../lib/mockData';
+import { getFilteredEvents, getCompanyProjects, getCompanyUsers } from '../lib/companyApi';
 
 interface ReportsProps {
   onNavigateToProject: (projectId: string) => void;
@@ -19,19 +19,50 @@ export function Reports({ onNavigateToProject, onNavigateToAlbum }: ReportsProps
   const [projectFilter, setProjectFilter] = useState('all');
   const [eventTypeFilter, setEventTypeFilter] = useState('all');
   const [userFilter, setUserFilter] = useState('all');
+  
+  const [events, setEvents] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [totalEvents, setTotalEvents] = useState(0);
 
-  const filteredEvents = mockEvents.filter(event => {
-    const eventDate = new Date(event.date);
-    const fromDate = dateFrom ? new Date(dateFrom) : null;
-    const toDate = dateTo ? new Date(dateTo) : null;
+  useEffect(() => {
+    loadData();
+  }, [dateFrom, dateTo, projectFilter, eventTypeFilter, userFilter]);
 
-    const matchesDate = (!fromDate || eventDate >= fromDate) && (!toDate || eventDate <= toDate);
-    const matchesProject = projectFilter === 'all' || event.projectId === projectFilter;
-    const matchesType = eventTypeFilter === 'all' || event.type === eventTypeFilter;
-    const matchesUser = userFilter === 'all' || event.user.includes(userFilter);
+  const loadData = async () => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        setIsLoading(false);
+        return;
+      }
 
-    return matchesDate && matchesProject && matchesType && matchesUser;
-  });
+      const [eventsResponse, projectsResponse, usersResponse] = await Promise.all([
+        getFilteredEvents(companyId, {
+          dateFrom,
+          dateTo,
+          projectId: projectFilter,
+          statusId: eventTypeFilter,
+          userId: userFilter
+        }),
+        getCompanyProjects(companyId),
+        getCompanyUsers(companyId)
+      ]);
+
+      setEvents(eventsResponse.events || []);
+      setTotalEvents(eventsResponse.total || 0);
+      setProjects(projectsResponse.projects || []);
+      setUsers(usersResponse.users || []);
+    } catch (error) {
+      console.error('❌ Failed to load reports data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredEvents = events;
 
   const formatDateTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -44,69 +75,136 @@ export function Reports({ onNavigateToProject, onNavigateToAlbum }: ReportsProps
     });
   };
 
-  const getEventBadgeVariant = (type: string) => {
-    switch (type) {
-      case '#замечания': return 'destructive';
-      case '#отклонено': return 'destructive';
-      default: return 'default';
+  const getEventBadgeVariant = (statusCode: string) => {
+    if (statusCode.includes('отклон') || statusCode.includes('замечан')) {
+      return 'destructive';
     }
+    return 'default';
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-4 md:p-8 flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-500">Загрузка отчётов...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleExport = (format: 'csv' | 'pdf') => {
-    console.log(`Экспорт отчёта в формате ${format.toUpperCase()}`, {
-      dateFrom,
-      dateTo,
-      projectFilter,
-      eventTypeFilter,
-      userFilter,
-      totalEvents: filteredEvents.length
-    });
-    alert(`Начат экспорт ${filteredEvents.length} событий в формате ${format.toUpperCase()}`);
-  };
-
-  const getProjectName = (projectId?: string) => {
-    if (!projectId) return '—';
-    const project = mockProjects.find(p => p.id === projectId);
-    return project ? `${project.code} ${project.name}` : '—';
-  };
-
-  const getAlbumName = (albumId?: string) => {
-    if (!albumId) return '—';
-    const album = mockAlbums.find(a => a.id === albumId);
-    return album ? album.name : '—';
-  };
-
-  // Последние уведомления
-  const recentNotifications = [
-    {
-      id: '1',
-      type: 'deadline',
-      message: 'Приближается дедлайн по альбому АР',
-      project: 'ПР-2025-001',
-      time: '2 часа назад'
-    },
-    {
-      id: '2',
-      type: 'comment',
-      message: 'Новое замечание от заказчика',
-      project: 'ПР-2025-002',
-      time: '5 часов назад'
-    },
-    {
-      id: '3',
-      type: 'approval',
-      message: 'Альбом ГП принят заказчиком',
-      project: 'ПР-2025-001',
-      time: '1 день назад'
-    },
-    {
-      id: '4',
-      type: 'upload',
-      message: 'Загружена новая версия альбома КР',
-      project: 'ПР-2025-001',
-      time: '1 день назад'
+    if (filteredEvents.length === 0) {
+      alert('Нет событий для экспорта');
+      return;
     }
-  ];
+
+    if (format === 'csv') {
+      exportToCSV();
+    } else {
+      exportToPDF();
+    }
+  };
+
+  const exportToCSV = () => {
+    // Формируем CSV данные
+    const headers = ['Дата и время', 'Тип события', 'Проект', 'Альбом', 'Пользователь', 'Комментарий'];
+    const rows = filteredEvents.map(event => [
+      formatDateTime(event.createdAt),
+      event.status.name,
+      event.project.code,
+      event.album.name,
+      `${event.createdBy.firstName} ${event.createdBy.lastName}`,
+      event.comment || ''
+    ]);
+
+    // Создаем CSV строку
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    // Создаем Blob и скачиваем
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `report_${dateFrom}_${dateTo}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToPDF = () => {
+    // Для PDF используем print с настройками
+    const printContent = `
+      <html>
+        <head>
+          <title>Отчёт по событиям</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { color: #2563eb; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f3f4f6; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9fafb; }
+          </style>
+        </head>
+        <body>
+          <h1>Отчёт по событиям</h1>
+          <p><strong>Период:</strong> ${dateFrom} - ${dateTo}</p>
+          <p><strong>Всего событий:</strong> ${filteredEvents.length}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Дата и время</th>
+                <th>Тип</th>
+                <th>Проект</th>
+                <th>Альбом</th>
+                <th>Пользователь</th>
+                <th>Комментарий</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredEvents.map(event => `
+                <tr>
+                  <td>${formatDateTime(event.createdAt)}</td>
+                  <td>${event.status.name}</td>
+                  <td>${event.project.code}</td>
+                  <td>${event.album.name}</td>
+                  <td>${event.createdBy.firstName} ${event.createdBy.lastName}</td>
+                  <td>${event.comment || ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    }
+  };
+
+  // Последние уведомления (берем последние 4 события для уведомлений)
+  const recentNotifications = events.slice(0, 4).map(event => ({
+    id: event.id.toString(),
+    type: event.status.code.includes('замечан') ? 'comment' : 
+          event.status.code.includes('принят') ? 'approval' : 
+          event.status.code.includes('выгруз') ? 'upload' : 'other',
+    message: event.comment || event.status.name,
+    project: event.project.code,
+    time: new Date(event.createdAt).toLocaleDateString('ru-RU')
+  }));
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -138,7 +236,7 @@ export function Reports({ onNavigateToProject, onNavigateToAlbum }: ReportsProps
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{mockEvents.length}</div>
+            <div className="text-3xl font-bold text-blue-600">{totalEvents}</div>
             <p className="text-xs text-gray-500 mt-1">за всё время</p>
           </CardContent>
         </Card>
@@ -216,9 +314,9 @@ export function Reports({ onNavigateToProject, onNavigateToAlbum }: ReportsProps
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Все проекты</SelectItem>
-                    {mockProjects.map(project => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.code}
+                    {projects.map(project => (
+                      <SelectItem key={project.id} value={project.id.toString()}>
+                        {project.code} - {project.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -250,9 +348,9 @@ export function Reports({ onNavigateToProject, onNavigateToAlbum }: ReportsProps
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Все пользователи</SelectItem>
-                    {mockUsers.map(user => (
-                      <SelectItem key={user.id} value={user.name}>
-                        {user.name}
+                    {users.map(user => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.firstName} {user.lastName}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -340,27 +438,30 @@ export function Reports({ onNavigateToProject, onNavigateToAlbum }: ReportsProps
                   {filteredEvents.map((event) => (
                     <tr key={event.id} className="border-b border-gray-100 hover:bg-blue-50/50 transition-colors">
                       <td className="py-4 px-4 text-sm text-gray-600">
-                        {formatDateTime(event.date)}
+                        {formatDateTime(event.createdAt)}
                       </td>
                       <td className="py-4 px-4">
-                        <Badge variant={getEventBadgeVariant(event.type)}>
-                          {event.type}
+                        <Badge variant={getEventBadgeVariant(event.status.code)}>
+                          #{event.status.name}
                         </Badge>
                       </td>
                       <td className="py-4 px-4 text-sm">
-                        {event.projectId && (
+                        {event.project && (
                           <button
                             className="text-blue-600 hover:underline font-medium"
-                            onClick={() => onNavigateToProject(event.projectId!)}
+                            onClick={() => onNavigateToProject(event.project.id)}
                           >
-                            {mockProjects.find(p => p.id === event.projectId)?.code}
+                            {event.project.code}
                           </button>
                         )}
                       </td>
                       <td className="py-4 px-4 text-sm text-gray-600">
-                        {getAlbumName(event.albumId)}
+                        {event.album.name}
                       </td>
-                      <td className="py-4 px-4 text-sm text-gray-900">{event.user}</td>
+                      <td className="py-4 px-4 text-sm text-gray-900">
+                        {event.createdBy.firstName} {event.createdBy.lastName}
+                        {event.createdBy.role === 'customer' && ' (Заказчик)'}
+                      </td>
                       <td className="py-4 px-4 text-sm text-gray-600">{event.comment}</td>
                     </tr>
                   ))}

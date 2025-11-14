@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Album } from '../App';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -18,6 +18,8 @@ import {
   Edit,
   Save
 } from 'lucide-react';
+import { companyApi } from '../lib/companyApi';
+import { toast } from 'sonner';
 
 interface AlbumsTableProps {
   albums: Album[];
@@ -29,6 +31,8 @@ interface AlbumsTableProps {
   isLoading?: boolean;
   error?: string;
   onRetry?: () => void;
+  companyId?: string;
+  projectId?: string;
 }
 
 export function AlbumsTable({ 
@@ -40,7 +44,9 @@ export function AlbumsTable({
   isExpanded = false,
   isLoading = false,
   error = null,
-  onRetry
+  onRetry,
+  companyId,
+  projectId
 }: AlbumsTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
@@ -59,36 +65,118 @@ export function AlbumsTable({
     code: '',
     department: '',
     executor: '',
+    customer: '',
     deadline: '',
     albumLink: '',
     comment: ''
   });
 
   // Album templates
-  const albumTemplates = [
-    { id: '1', name: 'Пояснительная записка', code: 'ПЗ', department: 'АР' },
-    { id: '2', name: 'Схема планировочной организации', code: 'ПЗУ', department: 'ГП' },
-    { id: '3', name: 'Архитектурные решения', code: 'АР', department: 'АР' },
-    { id: '4', name: 'Конструктивные решения', code: 'КР', department: 'КР' },
-    { id: '5', name: 'Система электроснабжения', code: 'ИОС1', department: 'ЭС' },
-    { id: '6', name: 'Система отопления, вентиляции и кондиционирования', code: 'ОВ', department: 'ОВВК' },
-    { id: '7', name: 'Система водоснабжения и водоотведения', code: 'ВК', department: 'ОВВК' },
-    { id: '8', name: 'Сети связи', code: 'СС', department: 'СС' },
-  ];
-
+  const [albumTemplates, setAlbumTemplates] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+
+  // Project participants
+  const [executors, setExecutors] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [projectDepartments, setProjectDepartments] = useState<any[]>([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+
+  // Load templates from API
+  useEffect(() => {
+    const loadTemplates = async () => {
+      if (!companyId) return;
+      
+      try {
+        setTemplatesLoading(true);
+        const response = await companyApi.getAlbumTemplates(companyId);
+        
+        if (response.success && response.templates) {
+          setAlbumTemplates(response.templates);
+        }
+      } catch (error) {
+        console.error('❌ Failed to load album templates:', error);
+        toast.error('Не удалось загрузить шаблоны альбомов');
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+
+    loadTemplates();
+  }, [companyId]);
+
+  // Load participants from project
+  useEffect(() => {
+    const loadParticipants = async () => {
+      if (!companyId || !projectId) return;
+      
+      try {
+        setParticipantsLoading(true);
+        const response = await companyApi.getProjectDetails(companyId, projectId);
+        
+        if (response.success && response.project) {
+          console.log('📄 Project participants:', response.project.participants);
+          console.log('🏭 Project departments:', response.project.departments);
+          setExecutors(response.project.participants?.executors || []);
+          setClients(response.project.participants?.clients || []);
+          setProjectDepartments(response.project.departments || []);
+        }
+      } catch (error) {
+        console.error('❌ Failed to load participants:', error);
+      } finally {
+        setParticipantsLoading(false);
+      }
+    };
+
+    loadParticipants();
+  }, [companyId, projectId]);
 
   // Apply template
-  const handleApplyTemplate = (templateId: string) => {
+  const handleApplyTemplate = (templateValue: string) => {
+    if (templateValue === 'none') {
+      setQuickAddData({
+        name: '',
+        code: '',
+        department: '',
+        executor: '',
+        customer: '',
+        deadline: '',
+        albumLink: '',
+        comment: ''
+      });
+      setSelectedTemplate('');
+      return;
+    }
+
+    // Parse template value (format: "templateId-itemId" or just "templateId")
+    const parts = templateValue.split('-');
+    const templateId = parts[0];
+    const itemId = parts.length > 1 ? parts[1] : null;
+
     const template = albumTemplates.find(t => t.id === templateId);
     if (template) {
-      setQuickAddData({
-        ...quickAddData,
-        name: template.name,
-        code: template.code,
-        department: template.department
-      });
-      setSelectedTemplate(templateId);
+      if (itemId && template.items) {
+        // Find specific item
+        const item = template.items.find((i: any) => i.id === itemId);
+        if (item) {
+          setQuickAddData({
+            ...quickAddData,
+            name: item.name || '',
+            code: item.code || '',
+            department: item.departmentCode || ''
+          });
+        }
+      } else if (template.items && template.items.length > 0) {
+        // Use first item if no specific item ID
+        const item = template.items[0];
+        setQuickAddData({
+          ...quickAddData,
+          name: item.name || template.name,
+          code: item.code || '',
+          department: item.departmentCode || ''
+        });
+      }
+      setSelectedTemplate(templateValue);
     }
   };
 
@@ -97,7 +185,7 @@ export function AlbumsTable({
     return ['all', ...new Set(albums.map(a => a.department))];
   }, [albums]);
 
-  const executors = useMemo(() => {
+  const executorFilters = useMemo(() => {
     return ['all', ...new Set(albums.map(a => a.executor.name))];
   }, [albums]);
 
@@ -235,8 +323,261 @@ export function AlbumsTable({
     );
   }
 
-  // Empty state
+  // Empty state - show quick add form or empty message
   if (albums.length === 0) {
+    if (isQuickAdding && onQuickAdd) {
+      // Show the table with only quick add form when adding first album
+      return (
+        <div className="space-y-4">
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+            <table className="w-full border-collapse table-fixed min-w-[1200px]">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-[200px]">Название</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-[100px]">Шифр</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-[120px]">Отдел</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-[150px]">Исполнитель</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-[150px]">Заказчик</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-[110px]">Дедлайн</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-[130px]">Статус</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-[120px]">Ссылка</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-[200px]">Комментарий</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t-2 border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <td colSpan={9} className="p-6">
+                    <div className="bg-white rounded-lg p-6 shadow-sm border border-blue-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">Создание нового альбома</h3>
+                          <p className="text-sm text-gray-500 mt-1">Заполните основные данные для альбома</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            disabled={!quickAddData.name || !quickAddData.code}
+                            className="gap-2 bg-green-600 hover:bg-green-700"
+                            onClick={() => {
+                              if (onQuickAdd && quickAddData.name && quickAddData.code) {
+                                onQuickAdd(quickAddData);
+                                setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', comment: '' });
+                                setSelectedTemplate('');
+                                setIsQuickAdding(false);
+                              }
+                            }}
+                          >
+                            <Check className="w-4 h-4" />
+                            Создать альбом
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-2"
+                            onClick={() => {
+                              setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', comment: '' });
+                              setSelectedTemplate('');
+                              setIsQuickAdding(false);
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                            Отмена
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-6">
+                        {/* Quick add form content will be rendered here - copying from below */}
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Использовать шаблон
+                            </label>
+                            <Select 
+                              value={selectedTemplate} 
+                              onValueChange={handleApplyTemplate}
+                            >
+                              <SelectTrigger className="h-10">
+                                <SelectValue placeholder="Выберите шаблон (опционально)" />
+                              </SelectTrigger>
+                              <SelectContent className="z-[100]">
+                                <SelectItem value="none">Без шаблона</SelectItem>
+                                {templatesLoading ? (
+                                  <SelectItem value="loading" disabled>Загрузка шаблонов...</SelectItem>
+                                ) : albumTemplates.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет доступных шаблонов</SelectItem>
+                                ) : (
+                                  albumTemplates.flatMap(template => 
+                                    template.items && template.items.length > 0 ? (
+                                      template.items.map((item: any) => (
+                                        <SelectItem key={`${template.id}-${item.id}`} value={`${template.id}-${item.id}`}>
+                                          {item.name} ({item.code})
+                                        </SelectItem>
+                                      ))
+                                    ) : (
+                                      <SelectItem key={template.id} value={template.id}>
+                                        {template.name}
+                                      </SelectItem>
+                                    )
+                                  )
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Название альбома *
+                            </label>
+                            <Input
+                              placeholder="Например: Архитектурные решения"
+                              value={quickAddData.name}
+                              onChange={(e) => setQuickAddData({...quickAddData, name: e.target.value})}
+                              className="h-10"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Шифр альбома *
+                            </label>
+                            <Input
+                              placeholder="Например: АР"
+                              value={quickAddData.code}
+                              onChange={(e) => setQuickAddData({...quickAddData, code: e.target.value})}
+                              className="h-10"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Отдел
+                            </label>
+                            <Select 
+                              value={quickAddData.department} 
+                              onValueChange={(value) => setQuickAddData({...quickAddData, department: value})}
+                            >
+                              <SelectTrigger className="h-10">
+                                <SelectValue placeholder="Выберите отдел" />
+                              </SelectTrigger>
+                              <SelectContent className="z-[100]">
+                                {participantsLoading ? (
+                                  <SelectItem value="loading" disabled>Загрузка...</SelectItem>
+                                ) : projectDepartments.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет отделов</SelectItem>
+                                ) : (
+                                  projectDepartments.map(dept => (
+                                    <SelectItem key={dept.id} value={dept.id}>
+                                      {dept.name} ({dept.code})
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Исполнитель
+                            </label>
+                            <Select 
+                              value={quickAddData.executor} 
+                              onValueChange={(value) => setQuickAddData({...quickAddData, executor: value})}
+                            >
+                              <SelectTrigger className="h-10">
+                                <SelectValue placeholder="Выберите исполнителя" />
+                              </SelectTrigger>
+                              <SelectContent className="z-[100]">
+                                {participantsLoading ? (
+                                  <SelectItem value="loading" disabled>Загрузка...</SelectItem>
+                                ) : executors.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет исполнителей</SelectItem>
+                                ) : (
+                                  executors.map(executor => (
+                                    <SelectItem key={executor.id} value={executor.id}>
+                                      {executor.name}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Заказчик
+                            </label>
+                            <Select 
+                              value={quickAddData.customer} 
+                              onValueChange={(value) => setQuickAddData({...quickAddData, customer: value})}
+                            >
+                              <SelectTrigger className="h-10">
+                                <SelectValue placeholder="Выберите заказчика" />
+                              </SelectTrigger>
+                              <SelectContent className="z-[100]">
+                                {participantsLoading ? (
+                                  <SelectItem value="loading" disabled>Загрузка...</SelectItem>
+                                ) : clients.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет заказчиков</SelectItem>
+                                ) : (
+                                  clients.map(client => (
+                                    <SelectItem key={client.id} value={client.id}>
+                                      {client.name}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Дедлайн
+                            </label>
+                            <Input
+                              type="date"
+                              value={quickAddData.deadline}
+                              onChange={(e) => setQuickAddData({...quickAddData, deadline: e.target.value})}
+                              className="h-10"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Ссылка на альбом
+                            </label>
+                            <Input
+                              placeholder="https://..."
+                              value={quickAddData.albumLink}
+                              onChange={(e) => setQuickAddData({...quickAddData, albumLink: e.target.value})}
+                              className="h-10"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Комментарий
+                            </label>
+                            <Input
+                              placeholder="Дополнительная информация"
+                              value={quickAddData.comment}
+                              onChange={(e) => setQuickAddData({...quickAddData, comment: e.target.value})}
+                              className="h-10"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+    
+    // Show empty state with button
     return (
       <div className="rounded-lg border border-gray-200 p-12 text-center bg-white">
         <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -244,8 +585,8 @@ export function AlbumsTable({
         </div>
         <h3 className="text-gray-900 mb-2">Нет альбомов</h3>
         <p className="text-gray-500 text-sm mb-6">Создте первый альбом для проекта</p>
-        {onAddAlbum && (
-          <Button onClick={onAddAlbum} className="gap-2">
+        {onQuickAdd && (
+          <Button onClick={() => setIsQuickAdding(true)} className="gap-2">
             <Plus className="w-4 h-4" />
             Создать альбом
           </Button>
@@ -296,7 +637,7 @@ export function AlbumsTable({
           </SelectTrigger>
           <SelectContent className="z-[100]">
             <SelectItem value="all">Все исполнители</SelectItem>
-            {executors.slice(1).map(exec => (
+            {executorFilters.slice(1).map(exec => (
               <SelectItem key={exec} value={exec}>{exec}</SelectItem>
             ))}
           </SelectContent>
@@ -641,11 +982,25 @@ export function AlbumsTable({
                               </SelectTrigger>
                               <SelectContent className="z-[100]">
                                 <SelectItem value="none">Без шаблона</SelectItem>
-                                {albumTemplates.map(template => (
-                                  <SelectItem key={template.id} value={template.id}>
-                                    {template.name} ({template.code})
-                                  </SelectItem>
-                                ))}
+                                {templatesLoading ? (
+                                  <SelectItem value="loading" disabled>Загрузка шаблонов...</SelectItem>
+                                ) : albumTemplates.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет доступных шаблонов</SelectItem>
+                                ) : (
+                                  albumTemplates.flatMap(template => 
+                                    template.items && template.items.length > 0 ? (
+                                      template.items.map((item: any) => (
+                                        <SelectItem key={`${template.id}-${item.id}`} value={`${template.id}-${item.id}`}>
+                                          {item.name} ({item.code})
+                                        </SelectItem>
+                                      ))
+                                    ) : (
+                                      <SelectItem key={template.id} value={template.id}>
+                                        {template.name}
+                                      </SelectItem>
+                                    )
+                                  )
+                                )}
                               </SelectContent>
                             </Select>
                           </div>
@@ -686,9 +1041,17 @@ export function AlbumsTable({
                                 <SelectValue placeholder="Выберите отдел" />
                               </SelectTrigger>
                               <SelectContent className="z-[100]">
-                                {departments.slice(1).map(dept => (
-                                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                                ))}
+                                {participantsLoading ? (
+                                  <SelectItem value="loading" disabled>Загрузка...</SelectItem>
+                                ) : projectDepartments.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет отделов</SelectItem>
+                                ) : (
+                                  projectDepartments.map(dept => (
+                                    <SelectItem key={dept.id} value={dept.id}>
+                                      {dept.name} ({dept.code})
+                                    </SelectItem>
+                                  ))
+                                )}
                               </SelectContent>
                             </Select>
                           </div>
@@ -705,17 +1068,51 @@ export function AlbumsTable({
                                 <SelectValue placeholder="Выберите исполнителя" />
                               </SelectTrigger>
                               <SelectContent className="z-[100]">
-                                {executors.slice(1).map(exec => (
-                                  <SelectItem key={exec} value={exec}>{exec}</SelectItem>
-                                ))}
+                                {participantsLoading ? (
+                                  <SelectItem value="loading" disabled>Загрузка...</SelectItem>
+                                ) : executors.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет исполнителей</SelectItem>
+                                ) : (
+                                  executors.map(executor => (
+                                    <SelectItem key={executor.id} value={executor.id}>
+                                      {executor.name}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Заказчик
+                            </label>
+                            <Select 
+                              value={quickAddData.customer} 
+                              onValueChange={(val) => setQuickAddData({...quickAddData, customer: val})}
+                            >
+                              <SelectTrigger className="h-10">
+                                <SelectValue placeholder="Выберите заказчика" />
+                              </SelectTrigger>
+                              <SelectContent className="z-[100]">
+                                {participantsLoading ? (
+                                  <SelectItem value="loading" disabled>Загрузка...</SelectItem>
+                                ) : clients.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет заказчиков</SelectItem>
+                                ) : (
+                                  clients.map(client => (
+                                    <SelectItem key={client.id} value={client.id}>
+                                      {client.name}
+                                    </SelectItem>
+                                  ))
+                                )}
                               </SelectContent>
                             </Select>
                           </div>
                         </div>
                         
                         {/* Right column */}
-                        <div className="space-y-4">
-                          <div>
+                        <div className="space-y-4">\n                          <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Дедлайн
                             </label>
