@@ -82,4 +82,7 @@ export async function closePool(): Promise<void> {
   console.log('✓ Database connection pool closed');
 }
 
+// Named export для удобства
+export { pool };
+
 export default pool;

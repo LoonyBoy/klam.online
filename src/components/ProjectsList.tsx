@@ -1,58 +1,82 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Plus, Search, Filter, FolderKanban, TrendingUp, ExternalLink } from 'lucide-react';
-import { mockProjects, mockAlbums } from '../lib/mockData';
 import { CreateProjectWizard } from './CreateProjectWizard';
+import { companyApi } from '../lib/companyApi';
 
 interface ProjectsListProps {
   onNavigateToProject: (projectId: string) => void;
 }
 
 export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
+  const [projects, setProjects] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [isWizardOpen, setIsWizardOpen] = useState(false);
 
-  const filteredProjects = mockProjects.filter(project => {
-    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         project.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         project.client.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
-    const matchesDepartment = departmentFilter === 'all' || project.department === departmentFilter;
-    
-    return matchesSearch && matchesStatus && matchesDepartment;
-  });
+  useEffect(() => {
+    loadProjects();
+  }, []);
 
-  const getProjectAlbumsCount = (projectId: string) => {
-    return mockAlbums.filter(a => a.projectId === projectId).length;
-  };
+  const loadProjects = async () => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        setIsLoading(false);
+        return;
+      }
 
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case 'Активный': return 'default';
-      case 'Завершён': return 'default';
-      case 'Приостановлен': return 'destructive';
-      default: return 'default';
+      const response = await companyApi.getCompanyProjects(companyId);
+      setProjects(response.projects || []);
+    } catch (error) {
+      console.error('❌ Failed to load projects:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  const filteredProjects = projects.filter(project => {
+    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         project.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (project.customerCompanyName && project.customerCompanyName.toLowerCase().includes(searchQuery.toLowerCase()));
+    // TODO: добавить фильтрацию по статусу когда будет поле status в БД
+    // TODO: добавить фильтрацию по отделу когда будет связь с departments
+    
+    return matchesSearch;
+  });
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
-  const departments = Array.from(new Set(mockProjects.map(p => p.department)));
+  // Подсчет статистики из реальных данных
+  const activeProjects = projects.filter(p => p.stats.activeAlbums > 0);
+  const uniqueDepartments = new Set<string>();
+  // TODO: когда будет связь с departments, подсчитывать уникальные отделы
 
   const handleProjectComplete = (projectData: any) => {
     console.log('Создан новый проект:', projectData);
+    loadProjects(); // Перезагружаем список проектов
   };
 
-  const activeCount = mockProjects.filter(p => p.status === 'Активный').length;
+  if (isLoading) {
+    return (
+      <div className="p-4 md:p-8 max-w-[1600px] mx-auto flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-500">Загрузка проектов...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
@@ -86,7 +110,7 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{mockProjects.length}</div>
+            <div className="text-3xl font-bold text-blue-600">{projects.length}</div>
             <p className="text-xs text-gray-500 mt-1">в системе</p>
           </CardContent>
         </Card>
@@ -99,7 +123,7 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">{activeCount}</div>
+            <div className="text-3xl font-bold text-green-600">{activeProjects.length}</div>
             <p className="text-xs text-gray-500 mt-1">в работе</p>
           </CardContent>
         </Card>
@@ -112,7 +136,7 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-purple-600">{departments.length}</div>
+            <div className="text-3xl font-bold text-purple-600">{uniqueDepartments.size}</div>
             <p className="text-xs text-gray-500 mt-1">отделов</p>
           </CardContent>
         </Card>
@@ -150,17 +174,7 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
               </SelectContent>
             </Select>
 
-            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Все отделы" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все отделы</SelectItem>
-                {departments.map(dept => (
-                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* TODO: Вернуть фильтр по отделам когда будет связь с project_departments */}
           </div>
         </CardContent>
       </Card>
@@ -194,28 +208,24 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
                         <span className="font-mono text-xs text-gray-500">{project.code}</span>
                         <h3 className="font-medium text-gray-900 mt-1">{project.name}</h3>
                       </div>
-                      <Badge variant={getStatusBadgeVariant(project.status)} className="ml-2">
-                        {project.status}
+                      <Badge variant="default" className="ml-2">
+                        {project.stats.activeAlbums > 0 ? 'Активный' : 'Неактивный'}
                       </Badge>
                     </div>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-gray-500">Заказчик:</span>
-                        <span className="font-medium text-gray-900">{project.client}</span>
+                        <span className="font-medium text-gray-900">{project.customerCompanyName || 'Не указан'}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-500">Отдел:</span>
-                        <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">
-                          {project.department}
-                        </Badge>
+                        <span className="text-gray-500">Владелец:</span>
+                        <span className="font-medium text-gray-900">
+                          {project.owner ? `${project.owner.firstName} ${project.owner.lastName || ''}`.trim() : 'Не назначен'}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-gray-500">Альбомов:</span>
-                        <Badge variant="outline">{getProjectAlbumsCount(project.id)}</Badge>
-                      </div>
-                      <div className="flex items-center justify-between pt-2 border-t">
-                        <span className="text-gray-500">Дедлайн:</span>
-                        <span className="text-gray-900">{formatDate(project.deadline)}</span>
+                        <Badge variant="outline">{project.stats.activeAlbums} / {project.stats.totalAlbums}</Badge>
                       </div>
                     </div>
                   </div>
@@ -230,10 +240,9 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
                       <th className="text-left py-4 px-4 font-semibold text-gray-700">Шифр</th>
                       <th className="text-left py-4 px-4 font-semibold text-gray-700">Название</th>
                       <th className="text-left py-4 px-4 font-semibold text-gray-700">Заказчик</th>
-                      <th className="text-left py-4 px-4 font-semibold text-gray-700">Отдел</th>
+                      <th className="text-left py-4 px-4 font-semibold text-gray-700">Владелец</th>
                       <th className="text-left py-4 px-4 font-semibold text-gray-700">Альбомов</th>
                       <th className="text-left py-4 px-4 font-semibold text-gray-700">Статус</th>
-                      <th className="text-left py-4 px-4 font-semibold text-gray-700">Дедлайн</th>
                       <th className="text-left py-4 px-4"></th>
                     </tr>
                   </thead>
@@ -254,24 +263,21 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
                             {project.name}
                           </span>
                         </td>
-                        <td className="py-4 px-4 text-gray-600">{project.client}</td>
-                        <td className="py-4 px-4">
-                          <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">
-                            {project.department}
-                          </Badge>
+                        <td className="py-4 px-4 text-gray-600">{project.customerCompanyName || 'Не указан'}</td>
+                        <td className="py-4 px-4 text-gray-600">
+                          {project.owner 
+                            ? `${project.owner.firstName} ${project.owner.lastName || ''}`.trim()
+                            : 'Не назначен'}
                         </td>
                         <td className="py-4 px-4 text-center">
                           <Badge variant="outline">
-                            {getProjectAlbumsCount(project.id)}
+                            {project.stats.activeAlbums} / {project.stats.totalAlbums}
                           </Badge>
                         </td>
                         <td className="py-4 px-4">
-                          <Badge variant={getStatusBadgeVariant(project.status)}>
-                            {project.status}
+                          <Badge variant="default">
+                            {project.stats.activeAlbums > 0 ? 'Активный' : 'Неактивный'}
                           </Badge>
-                        </td>
-                        <td className="py-4 px-4 text-gray-600 text-sm">
-                          {formatDate(project.deadline)}
                         </td>
                         <td className="py-4 px-4">
                           <Button 

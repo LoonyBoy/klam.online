@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LandingPage } from './components/LandingPage';
 import { LoginPage } from './components/LoginPage';
 import { Onboarding } from './components/Onboarding';
@@ -84,26 +84,116 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<'СВОК ПД' | 'СВОК РД'>('СВОК ПД');
+  const [isTelegramAuthProcessing, setIsTelegramAuthProcessing] = useState(false);
+
+  // Проверяем параметры URL для Telegram callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const hash = params.get('hash');
+    
+    if (hash && !isTelegramAuthProcessing) {
+      console.log('🔍 Обнаружен Telegram callback');
+      setIsTelegramAuthProcessing(true);
+      handleTelegramCallback(params);
+    }
+  }, [isTelegramAuthProcessing]);
+
+  const handleTelegramCallback = async (params: URLSearchParams) => {
+    try {
+      const userData = {
+        id: parseInt(params.get('id') || '0'),
+        first_name: params.get('first_name') || '',
+        last_name: params.get('last_name') || undefined,
+        username: params.get('username') || undefined,
+        photo_url: params.get('photo_url') || undefined,
+        auth_date: parseInt(params.get('auth_date') || '0'),
+        hash: params.get('hash') || ''
+      };
+
+      console.log('📤 Отправка Telegram данных на backend...');
+      console.log('📦 Данные для отправки:', JSON.stringify(userData, null, 2));
+      
+      const response = await fetch('/api/auth/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+      });
+
+      console.log('📡 Статус ответа:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Ошибка от сервера:', errorText);
+        throw new Error(`Authentication failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Авторизация успешна');
+      
+      // Сохраняем токен и данные
+      localStorage.setItem('authToken', data.token);
+      localStorage.setItem('user', JSON.stringify({
+        id: data.user.id,
+        telegramId: data.user.telegramId,
+        firstName: data.user.firstName,
+        lastName: data.user.lastName,
+        username: data.user.username,
+        photoUrl: data.user.photoUrl,
+      }));
+
+      // Очищаем URL от параметров
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Вызываем handleLogin
+      handleLogin();
+      
+    } catch (error) {
+      console.error('❌ Ошибка Telegram авторизации:', error);
+      alert('Ошибка при входе через Telegram');
+      setIsTelegramAuthProcessing(false);
+    }
+  };
 
   const handleGetStarted = () => {
     setCurrentPage('login');
   };
 
   const handleLogin = () => {
-    // Имитация данных пользователя из Telegram
+    // Получаем данные пользователя из localStorage
+    const storedUser = localStorage.getItem('user');
+    const userData = storedUser ? JSON.parse(storedUser) : null;
+    
+    // Устанавливаем данные пользователя
     setCurrentUser({
-      name: 'Иван',
-      telegramUsername: '@ivan_petrov',
-      email: 'ivan@example.com'
+      name: userData?.firstName || 'Пользователь',
+      telegramUsername: userData?.username ? `@${userData.username}` : undefined,
+      email: userData?.email
     });
     
-    // После логина показываем онбординг
-    setNeedsOnboarding(true);
-    setCurrentPage('onboarding');
+    // Проверяем, прошел ли пользователь онбординг
+    const hasCompletedOnboarding = localStorage.getItem('hasCompletedOnboarding') === 'true';
+    
+    if (hasCompletedOnboarding) {
+      // Пользователь уже проходил онбординг - сразу в dashboard
+      console.log('✅ Онбординг пройден ранее, переход в dashboard');
+      setIsAuthenticated(true);
+      setNeedsOnboarding(false);
+      setCurrentPage('dashboard');
+    } else {
+      // Новый пользователь - показываем онбординг
+      console.log('📋 Первый вход, показываем онбординг');
+      setNeedsOnboarding(true);
+      setCurrentPage('onboarding');
+    }
   };
 
   const handleOnboardingComplete = (companyId: string) => {
     console.log('Компания создана/выбрана:', companyId);
+    
+    // Сохраняем флаг завершения онбординга
+    localStorage.setItem('hasCompletedOnboarding', 'true');
+    localStorage.setItem('companyId', companyId);
+    
     setIsAuthenticated(true);
     setNeedsOnboarding(false);
     setCurrentPage('dashboard');

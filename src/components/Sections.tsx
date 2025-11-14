@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, FolderTree } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -17,47 +17,95 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
+import { companyApi } from '../lib/companyApi';
 
 interface AlbumTemplate {
   id: string;
   name: string;
-  code: string;
-  department: 'АР' | 'КР' | 'ОВВК' | 'ЭС' | 'ГП' | 'СС';
+  createdAt: string;
+  createdBy: {
+    firstName: string;
+    lastName: string | null;
+  } | null;
+  itemsCount: number;
+  items: Array<{
+    id: string;
+    name: string;
+    code: string;
+    defaultDeadlineDays: number | null;
+    department: {
+      id: string;
+      code: string;
+      name: string;
+    };
+    defaultStatus: {
+      id: string;
+      code: string;
+      name: string;
+    } | null;
+  }>;
 }
 
-const departments = [
-  { value: 'АР', label: 'АР - Архитектурные решения' },
-  { value: 'КР', label: 'КР - Конструктивные решения' },
-  { value: 'ОВВК', label: 'ОВВК - Отопление, вентиляция и кондиционирование' },
-  { value: 'ЭС', label: 'ЭС - Электроснабжение' },
-  { value: 'ГП', label: 'ГП - Генеральный план' },
-  { value: 'СС', label: 'СС - Сети связи' },
-];
-
 export function Sections() {
-  const [templates, setTemplates] = useState<AlbumTemplate[]>([
-    { id: '1', name: 'Пояснительная записка', code: 'ПЗ', department: 'АР' },
-    { id: '2', name: 'Схема планировочной организации', code: 'ПЗУ', department: 'ГП' },
-    { id: '3', name: 'Архитектурные решения', code: 'АР', department: 'АР' },
-    { id: '4', name: 'Конструктивные решения', code: 'КР', department: 'КР' },
-    { id: '5', name: 'Система электроснабжения', code: 'ИОС1', department: 'ЭС' },
-  ]);
-  
+  const [templates, setTemplates] = useState<AlbumTemplate[]>([]);
+  const [departments, setDepartments] = useState<Array<{id: number; code: string; name: string}>>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<AlbumTemplate | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
-    department: '' as AlbumTemplate['department'] | '',
+    department: '',
   });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      await Promise.all([loadTemplates(), loadDepartments()]);
+    } catch (error) {
+      console.error('❌ Failed to load data:', error);
+    }
+  };
+
+  const loadDepartments = async () => {
+    try {
+      const response = await companyApi.getDepartments();
+      setDepartments(response.departments || []);
+    } catch (error) {
+      console.error('❌ Failed to load departments:', error);
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        setIsLoading(false);
+        return;
+      }
+
+      const response = await companyApi.getCompanyTemplates(companyId);
+      setTemplates(response.templates || []);
+    } catch (error) {
+      console.error('❌ Failed to load templates:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleOpenDialog = (template?: AlbumTemplate) => {
     if (template) {
       setEditingTemplate(template);
+      // Для редактирования показываем информацию о первом элементе
+      const firstItem = template.items[0];
       setFormData({
         name: template.name,
-        code: template.code,
-        department: template.department,
+        code: firstItem?.code || '',
+        department: firstItem?.department.code || '',
       });
     } else {
       setEditingTemplate(null);
@@ -72,39 +120,105 @@ export function Sections() {
     setFormData({ name: '', code: '', department: '' });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.code || !formData.department) {
       return;
     }
 
-    if (editingTemplate) {
-      // Редактирование
-      setTemplates(templates.map(t => 
-        t.id === editingTemplate.id 
-          ? { ...t, name: formData.name, code: formData.code, department: formData.department as AlbumTemplate['department'] }
-          : t
-      ));
-    } else {
-      // Создание
-      const newTemplate: AlbumTemplate = {
-        id: Date.now().toString(),
-        name: formData.name,
-        code: formData.code,
-        department: formData.department as AlbumTemplate['department'],
-      };
-      setTemplates([...templates, newTemplate]);
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        return;
+      }
+
+      if (editingTemplate) {
+        // Редактирование существующего шаблона
+        const department = departments.find(d => d.code === formData.department);
+        if (!department) {
+          alert('Пожалуйста, выберите отдел');
+          return;
+        }
+
+        const templateData = {
+          name: formData.name,
+          items: [
+            {
+              name: formData.name,
+              code: formData.code,
+              departmentId: department.id,
+              defaultStatusId: null,
+              defaultDeadlineDays: null,
+            },
+          ],
+        };
+
+        await companyApi.updateTemplate(companyId, editingTemplate.id, templateData);
+        await loadTemplates();
+      } else {
+        // Создание нового шаблона с одним элементом
+        const department = departments.find(d => d.code === formData.department);
+        if (!department) {
+          alert('Пожалуйста, выберите отдел');
+          return;
+        }
+
+        const templateData = {
+          name: formData.name,
+          items: [
+            {
+              name: formData.name,
+              code: formData.code,
+              departmentId: department.id,
+              defaultStatusId: null,
+              defaultDeadlineDays: null,
+            },
+          ],
+        };
+
+        await companyApi.createTemplate(companyId, templateData);
+        await loadTemplates(); // Перезагружаем список
+      }
+      
+      handleCloseDialog();
+    } catch (error) {
+      console.error('❌ Failed to save template:', error);
+      alert('Ошибка при сохранении шаблона');
     }
-    
-    handleCloseDialog();
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Вы уверены, что хотите удалить этот шаблон?')) {
-      setTemplates(templates.filter(t => t.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm('Вы уверены, что хотите удалить этот шаблон?')) {
+      return;
+    }
+
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        return;
+      }
+
+      await companyApi.deleteTemplate(companyId, id);
+      await loadTemplates(); // Перезагружаем список
+    } catch (error) {
+      console.error('❌ Failed to delete template:', error);
+      alert('Ошибка при удалении шаблона');
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-4 md:p-8 flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-500">Загрузка шаблонов...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-8 space-y-6">
@@ -166,16 +280,15 @@ export function Sections() {
                 <Label htmlFor="department">Отдел</Label>
                 <Select
                   value={formData.department}
-                  onValueChange={(value) => setFormData({ ...formData, department: value as AlbumTemplate['department'] })}
-                  required
+                  onValueChange={(value) => setFormData({ ...formData, department: value })}
                 >
                   <SelectTrigger id="department">
                     <SelectValue placeholder="Выберите отдел" />
                   </SelectTrigger>
                   <SelectContent>
                     {departments.map((dept) => (
-                      <SelectItem key={dept.value} value={dept.value}>
-                        {dept.label}
+                      <SelectItem key={dept.id} value={dept.code}>
+                        {dept.code} - {dept.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -217,45 +330,62 @@ export function Sections() {
                   </td>
                 </tr>
               ) : (
-                templates.map((template) => (
-                  <tr key={template.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <FolderTree className="w-4 h-4 text-gray-400" />
-                        <span>{template.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-blue-100 text-blue-800 text-sm font-medium">
-                        {template.code}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-purple-100 text-purple-800 text-sm font-medium">
-                        {template.department}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenDialog(template)}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(template.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                templates.map((template) => {
+                  // Берем первый элемент для отображения в таблице
+                  const firstItem = template.items[0];
+                  
+                  return (
+                    <tr key={template.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <FolderTree className="w-4 h-4 text-gray-400" />
+                          <div>
+                            <div>{template.name}</div>
+                            {template.itemsCount > 1 && (
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {template.itemsCount} элементов
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {firstItem && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-blue-100 text-blue-800 text-sm font-medium">
+                            {firstItem.code}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {firstItem && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-purple-100 text-purple-800 text-sm font-medium">
+                            {firstItem.department.code}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenDialog(template)}
+                            title="Просмотр и редактирование шаблона"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(template.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

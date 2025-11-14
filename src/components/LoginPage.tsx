@@ -22,27 +22,87 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleTelegramAuth = async (user: TelegramUser) => {
+    console.log('═══════════════════════════════════════');
+    console.log('🔐 Telegram авторизация началась...');
+    console.log('📋 Данные пользователя:', user);
+    console.log('═══════════════════════════════════════');
     setIsLoading(true);
     
     try {
-      console.log('Telegram user data:', user);
+      console.log('📤 Отправка данных на backend...');
+      console.log('🔗 URL запроса: /api/auth/telegram');
+      console.log('🌐 Origin:', window.location.origin);
       
-      // TODO: Отправить данные на backend для верификации
-      // const response = await fetch('http://localhost:3001/api/auth/telegram', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(user)
-      // });
-      // const data = await response.json();
+      // Используем относительный путь - Vite proxy перенаправит на backend
+      const response = await fetch('/api/auth/telegram', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(user)
+      });
+
+      console.log('📡 Ответ получен:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Ошибка ответа:', errorText);
+        let error;
+        try {
+          error = JSON.parse(errorText);
+        } catch {
+          error = { error: errorText };
+        }
+        throw new Error(error.error || 'Authentication failed');
+      }
+
+      const data = await response.json();
+      console.log('✅ Данные получены:', data);
       
-      // Пока просто логиним пользователя
-      setTimeout(() => {
-        setIsLoading(false);
-        onLogin();
-      }, 500);
-    } catch (error) {
-      console.error('Auth error:', error);
+      if (!data.success) {
+        throw new Error('Authentication failed');
+      }
+
+      console.log('💾 Сохранение в localStorage...');
+      
+      // Сохраняем JWT токен и данные пользователя
+      localStorage.setItem('authToken', data.token);
+      localStorage.setItem('user', JSON.stringify({
+        id: data.user.id,
+        telegramId: data.user.telegramId,
+        firstName: data.user.firstName,
+        lastName: data.user.lastName,
+        username: data.user.username,
+        photoUrl: data.user.photoUrl,
+      }));
+      
+      if (data.isNewUser) {
+        console.log('✨ Новый пользователь создан в БД');
+      } else {
+        console.log('📝 Данные существующего пользователя обновлены');
+      }
+
+      console.log('🚀 Вход выполнен, перенаправление...');
+      console.log('═══════════════════════════════════════');
+      
+      // Переходим в приложение
       setIsLoading(false);
+      onLogin();
+    } catch (error) {
+      console.log('═══════════════════════════════════════');
+      console.error('❌ ОШИБКА АВТОРИЗАЦИИ:', error);
+      console.error('Тип ошибки:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('Сообщение:', error instanceof Error ? error.message : String(error));
+      if (error instanceof Error && error.stack) {
+        console.error('Stack trace:', error.stack);
+      }
+      console.log('═══════════════════════════════════════');
+      setIsLoading(false);
+      alert(`Ошибка при входе: ${error instanceof Error ? error.message : 'Попробуйте снова'}`);
     }
   };
 
@@ -319,6 +379,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                         requestAccess={true}
                         usePic={false}
                         dataOnauth={handleTelegramAuth}
+                        dataAuthUrl={`${window.location.origin}/auth/telegram`}
                       />
                     </div>
                   ) : (

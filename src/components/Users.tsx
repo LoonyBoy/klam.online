@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -6,10 +6,29 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Plus, Edit, Users as UsersIcon, UserCheck, UserCog } from 'lucide-react';
-import { mockUsers } from '../lib/mockData';
+import { Plus, Edit, Users as UsersIcon, UserCheck, UserCog, SquarePen } from 'lucide-react';
+import { getCompanyUsers, getCompanyUsersStats } from '../lib/companyApi';
+
+interface User {
+  id: string;
+  telegramId: string;
+  telegramUsername: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  roleInCompany: 'owner' | 'admin' | 'member';
+  roleType: 'executor' | 'customer' | null;
+  department: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
+}
 
 export function Users() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [stats, setStats] = useState({ totalUsers: 0, executors: 0, customers: 0 });
+  const [isLoading, setIsLoading] = useState(true);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<string | null>(null);
   
@@ -18,6 +37,37 @@ export function Users() {
   const [userTelegram, setUserTelegram] = useState('');
   const [userRole, setUserRole] = useState('');
   const [userDepartment, setUserDepartment] = useState('');
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        setIsLoading(false);
+        return;
+      }
+
+      const [usersResponse, statsResponse] = await Promise.all([
+        getCompanyUsers(companyId),
+        getCompanyUsersStats(companyId)
+      ]);
+
+      setUsers(usersResponse.users || []);
+      setStats({
+        totalUsers: statsResponse.totalUsers || 0,
+        executors: statsResponse.executors || 0,
+        customers: statsResponse.customers || 0
+      });
+    } catch (error) {
+      console.error('❌ Failed to load users data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleAddUser = () => {
     console.log('Добавление пользователя:', {
@@ -37,13 +87,13 @@ export function Users() {
   };
 
   const handleEditUser = (userId: string) => {
-    const user = mockUsers.find(u => u.id === userId);
+    const user = users.find(u => u.id === userId);
     if (user) {
-      setUserName(user.name);
-      setUserEmail(user.email);
-      setUserTelegram(user.telegramId);
-      setUserRole(user.role);
-      setUserDepartment(user.department);
+      setUserName(`${user.firstName} ${user.lastName || ''}`);
+      setUserEmail(user.email || '');
+      setUserTelegram(user.telegramUsername || '');
+      setUserRole(user.roleType || '');
+      setUserDepartment(user.department?.code || '');
       setEditingUser(userId);
     }
   };
@@ -64,16 +114,29 @@ export function Users() {
     setUserDepartment('');
   };
 
-  const getRoleBadgeVariant = (role: string) => {
-    return role === 'executor' ? 'default' : 'default';
+  const getRoleBadgeClass = (roleType: string | null) => {
+    return roleType === 'executor' 
+      ? 'bg-purple-100 text-purple-700 border-purple-200' 
+      : 'bg-orange-100 text-orange-700 border-orange-200';
   };
 
-  const getRoleLabel = (role: string) => {
-    return role === 'executor' ? 'Исполнитель' : 'Заказчик';
+  const getRoleLabel = (roleType: string | null) => {
+    return roleType === 'executor' ? 'Исполнитель' : 'Заказчик';
   };
 
-  const executors = mockUsers.filter(u => u.role === 'executor');
-  const clients = mockUsers.filter(u => u.role === 'client');
+  const getInitials = (firstName: string, lastName: string | null) => {
+    return (firstName.charAt(0) + (lastName?.charAt(0) || '')).toUpperCase();
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">Загрузка...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
@@ -179,7 +242,7 @@ export function Users() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{mockUsers.length}</div>
+            <div className="text-3xl font-bold text-blue-600">{stats.totalUsers}</div>
             <p className="text-xs text-gray-500 mt-1">в системе</p>
           </CardContent>
         </Card>
@@ -192,7 +255,7 @@ export function Users() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-purple-600">{executors.length}</div>
+            <div className="text-3xl font-bold text-purple-600">{stats.executors}</div>
             <p className="text-xs text-gray-500 mt-1">активных исполнителей</p>
           </CardContent>
         </Card>
@@ -205,7 +268,7 @@ export function Users() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-orange-600">{clients.length}</div>
+            <div className="text-3xl font-bold text-orange-600">{stats.customers}</div>
             <p className="text-xs text-gray-500 mt-1">представителей заказчиков</p>
           </CardContent>
         </Card>
@@ -217,7 +280,7 @@ export function Users() {
           <CardTitle className="text-lg">Список пользователей</CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          {mockUsers.length === 0 ? (
+          {users.length === 0 ? (
             <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
               <UsersIcon className="w-16 h-16 mx-auto mb-4 text-gray-400" />
               <p className="text-gray-600 mb-1">Пользователи не добавлены</p>
@@ -227,16 +290,16 @@ export function Users() {
             <>
               {/* Мобильное представление - карточки */}
               <div className="md:hidden space-y-3">
-                {mockUsers.map((user) => (
+                {users.map((user) => (
                   <div key={user.id} className="p-4 rounded-lg border-2 border-gray-200 bg-white">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3 flex-1">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-400 flex items-center justify-center text-white font-medium">
-                          {user.name.charAt(0)}
+                          {getInitials(user.firstName, user.lastName)}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{user.name}</p>
-                          <p className="text-xs text-gray-500">{user.email}</p>
+                          <p className="font-medium text-gray-900">{user.firstName} {user.lastName || ''}</p>
+                          <p className="text-xs text-gray-500">{user.email || 'Нет email'}</p>
                         </div>
                       </div>
                       <Dialog 
@@ -258,7 +321,7 @@ export function Users() {
                             size="sm"
                             onClick={() => handleEditUser(user.id)}
                           >
-                            <Edit className="w-4 h-4" />
+                            <SquarePen className="w-4 h-4" />
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-[90vw] md:max-w-[425px]">
@@ -345,16 +408,20 @@ export function Users() {
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-gray-500">Telegram:</span>
-                        <span className="text-gray-900">{user.telegramId}</span>
+                        <span className="text-gray-900">@{user.telegramUsername || 'не указан'}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-gray-500">Роль:</span>
-                        <Badge variant={getRoleBadgeVariant(user.role)} className={user.role === 'executor' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-orange-100 text-orange-700 border-orange-200'}>
-                          {getRoleLabel(user.role)}
+                        <Badge className={getRoleBadgeClass(user.roleType)}>
+                          {getRoleLabel(user.roleType)}
                         </Badge>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-gray-500">Отдел:</span>
+                        <Badge className="bg-blue-50 border-blue-200 text-blue-700">
+                          {user.department?.name || 'Не указан'}
+                        </Badge>
+                      </div>
                         <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">{user.department}</Badge>
                       </div>
                     </div>
@@ -376,25 +443,27 @@ export function Users() {
                     </tr>
                   </thead>
                   <tbody>
-                    {mockUsers.map((user) => (
+                    {users.map((user) => (
                       <tr key={user.id} className="border-b border-gray-100 hover:bg-blue-50/50 transition-colors group">
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-400 flex items-center justify-center text-white text-sm font-medium">
-                              {user.name.charAt(0)}
+                              {getInitials(user.firstName, user.lastName)}
                             </div>
-                            <span className="font-medium">{user.name}</span>
+                            <span className="font-medium">{user.firstName} {user.lastName || ''}</span>
                           </div>
                         </td>
-                        <td className="py-4 px-4 text-sm text-gray-600">{user.email}</td>
-                        <td className="py-4 px-4 text-sm text-gray-600">{user.telegramId}</td>
+                        <td className="py-4 px-4 text-sm text-gray-600">{user.email || 'Нет email'}</td>
+                        <td className="py-4 px-4 text-sm text-gray-600">@{user.telegramUsername || 'не указан'}</td>
                         <td className="py-4 px-4">
-                          <Badge variant={getRoleBadgeVariant(user.role)} className={user.role === 'executor' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-orange-100 text-orange-700 border-orange-200'}>
-                            {getRoleLabel(user.role)}
+                          <Badge className={getRoleBadgeClass(user.roleType)}>
+                            {getRoleLabel(user.roleType)}
                           </Badge>
                         </td>
                         <td className="py-4 px-4">
-                          <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">{user.department}</Badge>
+                          <Badge className="bg-blue-50 border-blue-200 text-blue-700">
+                            {user.department?.name || 'Не указан'}
+                          </Badge>
                         </td>
                         <td className="py-4 px-4">
                           <Dialog 
@@ -417,7 +486,7 @@ export function Users() {
                                 className="gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={() => handleEditUser(user.id)}
                               >
-                                <Edit className="w-4 h-4" />
+                                <SquarePen className="w-4 h-4" />
                                 Изменить
                               </Button>
                             </DialogTrigger>

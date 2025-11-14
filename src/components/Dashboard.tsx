@@ -1,36 +1,87 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Bell, FolderKanban, Album, AlertCircle, Clock, TrendingUp, ExternalLink } from 'lucide-react';
-import { mockProjects, mockAlbums, mockEvents } from '../lib/mockData';
+import { companyApi } from '../lib/companyApi';
 
 interface DashboardProps {
   onNavigateToProject: (projectId: string) => void;
 }
 
 export function Dashboard({ onNavigateToProject }: DashboardProps) {
-  const activeProjects = mockProjects.filter(p => p.status === 'Активный');
-  const totalAlbums = mockAlbums.length;
-  const activeIssues = mockEvents.filter(e => e.type === '#замечания').length;
-  const recentEvents = mockEvents.slice(0, 6);
+  const [companyData, setCompanyData] = useState<any>(null);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [activeRemarks, setActiveRemarks] = useState(0);
+  const [deadlines, setDeadlines] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Ближайшие дедлайны
-  const upcomingDeadlines = mockAlbums
-    .map(album => {
-      const project = mockProjects.find(p => p.id === album.projectId);
-      return { ...album, projectName: project?.name || '' };
-    })
-    .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
-    .slice(0, 5);
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        console.error('❌ No company ID found');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('📤 Loading dashboard data...');
+      
+      // Загружаем все данные параллельно
+      const [companyResponse, projectsResponse, remarksResponse, deadlinesResponse, eventsResponse] = await Promise.all([
+        companyApi.getCompany(companyId),
+        companyApi.getCompanyProjects(companyId),
+        companyApi.getAlbumsStatistics(companyId),
+        companyApi.getUpcomingDeadlines(companyId, 5),
+        companyApi.getRecentEvents(companyId, 6)
+      ]);
+      
+      setCompanyData(companyResponse.company);
+      setProjects(projectsResponse.projects || []);
+      setActiveRemarks(remarksResponse.activeRemarks || 0);
+      setDeadlines(deadlinesResponse || []);
+      setEvents(eventsResponse || []);
+      
+      console.log('✅ Dashboard data loaded');
+    } catch (error) {
+      console.error('❌ Failed to load dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Подсчет статистики из реальных данных
+  const activeProjects = projects.filter((p: any) => p.stats.activeAlbums > 0);
+  const totalAlbums = projects.reduce((sum: number, p: any) => sum + p.stats.totalAlbums, 0);
+  const activeAlbums = projects.reduce((sum: number, p: any) => sum + p.stats.activeAlbums, 0);
 
   const getEventBadgeColor = (type: string) => {
-    switch (type) {
-      case '#замечания': return 'destructive';
-      case '#выгрузка': return 'default';
-      case '#принято': return 'default';
-      case '#отклонено': return 'destructive';
-      case '#правки': return 'default';
-      default: return 'default';
+    // Статус может быть в формате #code или просто code
+    const statusCode = type.replace('#', '');
+    
+    switch (statusCode) {
+      case 'замечания':
+      case 'remarks': 
+        return 'destructive';
+      case 'выгрузка':
+      case 'upload':
+      case 'sent':
+        return 'default';
+      case 'принято':
+      case 'accepted':
+        return 'default';
+      case 'отклонено':
+        return 'destructive';
+      case 'правки':
+      case 'pending':
+        return 'default';
+      default: 
+        return 'default';
     }
   };
 
@@ -49,6 +100,17 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
     });
   };
 
+  if (isLoading) {
+    return (
+      <div className="p-4 md:p-8 max-w-[1600px] mx-auto flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-500">Загрузка данных компании...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
       {/* Заголовок */}
@@ -56,9 +118,13 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
-              Добро пожаловать!
+              {companyData ? companyData.name : 'Добро пожаловать!'}
             </h1>
-            <p className="text-gray-500 mt-1 text-sm md:text-base">Обзор активных проектов и событий</p>
+            <p className="text-gray-500 mt-1 text-sm md:text-base">
+              {companyData 
+                ? `Обзор активных проектов и событий • Участников: ${companyData.members?.length || 0}`
+                : 'Обзор активных проектов и событий'}
+            </p>
           </div>
           <Button variant="outline" className="gap-2 hover:bg-blue-50 border-gray-300 w-full sm:w-auto">
             <Bell className="w-4 h-4" />
@@ -80,7 +146,7 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
             <div className="text-2xl md:text-3xl font-bold text-blue-600">{activeProjects.length}</div>
             <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
               <TrendingUp className="w-3 h-3" />
-              из {mockProjects.length} всего
+              из {projects.length} всего
             </p>
           </CardContent>
         </Card>
@@ -93,8 +159,8 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl md:text-3xl font-bold text-purple-600">{totalAlbums}</div>
-            <p className="text-xs text-gray-500 mt-1">всего альбомов</p>
+            <div className="text-2xl md:text-3xl font-bold text-purple-600">{activeAlbums}</div>
+            <p className="text-xs text-gray-500 mt-1">всего альбомов: {totalAlbums}</p>
           </CardContent>
         </Card>
 
@@ -106,7 +172,7 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl md:text-3xl font-bold text-orange-600">{activeIssues}</div>
+            <div className="text-2xl md:text-3xl font-bold text-orange-600">{activeRemarks}</div>
             <p className="text-xs text-gray-500 mt-1">требуют внимания</p>
           </CardContent>
         </Card>
@@ -120,10 +186,10 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
           </CardHeader>
           <CardContent>
             <div className="text-lg md:text-xl font-bold text-red-600">
-              {upcomingDeadlines[0] ? formatDate(upcomingDeadlines[0].deadline) : '—'}
+              {deadlines[0] ? formatDate(deadlines[0].deadline) : '—'}
             </div>
             <p className="text-xs text-gray-500 mt-1 truncate">
-              {upcomingDeadlines[0]?.name || 'нет дедлайнов'}
+              {deadlines[0]?.albumName || 'нет дедлайнов'}
             </p>
           </CardContent>
         </Card>
@@ -136,21 +202,33 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
             <CardTitle className="text-lg">Последние события</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <div className="space-y-2">
-              {recentEvents.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-200">
-                  <Badge variant={getEventBadgeColor(event.type)} className="mt-0.5 shrink-0">
-                    {event.type}
-                  </Badge>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">{event.comment}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {event.user} • {formatDateTime(event.date)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {events.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>Нет событий</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {events.map((event) => {
+                  const eventType = `#${event.status.code}`;
+                  const userName = `${event.createdBy.firstName} ${event.createdBy.lastName || ''}`;
+                  const roleLabel = event.createdBy.role === 'customer' ? ' (Заказчик)' : '';
+                  
+                  return (
+                    <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-200">
+                      <Badge variant={getEventBadgeColor(eventType)} className="mt-0.5 shrink-0">
+                        {eventType}
+                      </Badge>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-900">{event.comment || event.status.name}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {userName.trim()}{roleLabel} • {formatDateTime(event.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -160,31 +238,34 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
             <CardTitle className="text-lg">Ближайшие дедлайны</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <div className="space-y-2">
-              {upcomingDeadlines.map((album) => {
-                const daysLeft = Math.ceil(
-                  (new Date(album.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-                );
-                const isUrgent = daysLeft <= 3;
+            {deadlines.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>Нет дедлайнов</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {deadlines.map((album) => {
+                  const isUrgent = album.daysUntilDeadline <= 3;
 
-                return (
-                  <div key={album.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-200">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{album.name} ({album.code})</p>
-                      <p className="text-xs text-gray-500 truncate">{album.projectName}</p>
+                  return (
+                    <div key={album.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-200">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{album.albumName} ({album.albumCode})</p>
+                        <p className="text-xs text-gray-500 truncate">{album.projectName}</p>
+                      </div>
+                      <div className="text-right ml-4">
+                        <p className={`text-sm font-medium ${isUrgent || album.isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
+                          {formatDate(album.deadline)}
+                        </p>
+                        <Badge variant={isUrgent || album.isOverdue ? 'destructive' : 'outline'} className="text-xs mt-1">
+                          {album.isOverdue ? 'Просрочен' : `${album.daysUntilDeadline} дн.`}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="text-right ml-4">
-                      <p className={`text-sm font-medium ${isUrgent ? 'text-red-600' : 'text-gray-900'}`}>
-                        {formatDate(album.deadline)}
-                      </p>
-                      <Badge variant={isUrgent ? 'destructive' : 'outline'} className="text-xs mt-1">
-                        {daysLeft > 0 ? `${daysLeft} дн.` : 'Просрочен'}
-                      </Badge>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -195,37 +276,57 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
           <CardTitle className="text-lg">Активные проекты</CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {activeProjects.map((project) => (
-              <div
-                key={project.id}
-                className="group p-5 border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-md transition-all cursor-pointer bg-white"
-                onClick={() => onNavigateToProject(project.id)}
+          {projects.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p className="text-lg font-medium mb-2">Нет проектов</p>
+              <p className="text-sm mb-4">Создайте первый проект для начала работы</p>
+              <Button 
+                variant="default" 
+                className="mt-2 bg-blue-600 hover:bg-blue-700"
+                onClick={() => {/* TODO: открыть мастер создания проекта */}}
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-xs text-gray-500 font-mono">{project.code}</p>
-                    <h3 className="mt-1 text-gray-900 group-hover:text-blue-600 transition-colors">{project.name}</h3>
+                Создать проект
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {activeProjects.map((project) => (
+                <div
+                  key={project.id}
+                  className="group p-5 border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-md transition-all cursor-pointer bg-white"
+                  onClick={() => onNavigateToProject(project.id)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <p className="text-xs text-gray-500 font-mono">{project.code}</p>
+                      <h3 className="mt-1 text-gray-900 group-hover:text-blue-600 transition-colors">{project.name}</h3>
+                    </div>
+                    <ExternalLink className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
                   </div>
-                  <ExternalLink className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                  <div className="space-y-1.5 text-sm text-gray-600">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Заказчик:</span>
+                      <span className="font-medium">{project.customerCompanyName || 'Не указан'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Владелец:</span>
+                      <span className="font-medium">
+                        {project.owner 
+                          ? `${project.owner.firstName} ${project.owner.lastName || ''}`.trim()
+                          : 'Не назначен'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t mt-2">
+                      <span className="text-gray-500">Альбомов:</span>
+                      <Badge variant="outline" className="font-medium">
+                        {project.stats.activeAlbums} / {project.stats.totalAlbums}
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1.5 text-sm text-gray-600">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Заказчик:</span>
-                    <span className="font-medium">{project.client}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Исполнитель:</span>
-                    <span className="font-medium">{project.executor}</span>
-                  </div>
-                  <div className="flex items-center justify-between pt-2 border-t mt-2">
-                    <span className="text-gray-500">Дедлайн:</span>
-                    <Badge variant="outline" className="font-medium">{formatDate(project.deadline)}</Badge>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

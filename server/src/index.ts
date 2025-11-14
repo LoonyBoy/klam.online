@@ -10,6 +10,9 @@ import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { testConnection } from './db';
+import authRoutes from './routes/auth';
+import companyRoutes from './routes/companies';
+import dictionaryRoutes from './routes/dictionaries';
 
 // Load environment variables
 dotenv.config();
@@ -70,9 +73,12 @@ app.get('/api', (req: Request, res: Response) => {
   });
 });
 
-// TODO: Add API routes here
-// app.use('/api/auth', authRoutes);
-// app.use('/api/companies', companyRoutes);
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/companies', companyRoutes);
+app.use('/api/dictionaries', dictionaryRoutes);
+
+// TODO: Add more API routes here
 // app.use('/api/projects', projectRoutes);
 // app.use('/api/albums', albumRoutes);
 

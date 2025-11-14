@@ -33,10 +33,15 @@ export function Onboarding({ userName, userTelegramUsername, userEmail, onComple
     setIsLoading(true);
     
     try {
+      // Убираем @ из username если он есть
+      const cleanUsername = userTelegramUsername 
+        ? userTelegramUsername.replace(/^@/, '') 
+        : undefined;
+      
       // Загружаем приглашения через API
       const data = await companyApi.getInvitations({
         email: userEmail,
-        telegramUsername: userTelegramUsername
+        telegramUsername: cleanUsername
       });
       
       // Фильтруем только активные приглашения
@@ -104,13 +109,12 @@ export function Onboarding({ userName, userTelegramUsername, userEmail, onComple
     setError('');
     
     try {
-      const newCompany = await companyApi.createCompany({
-        name: companyName,
-        ownerId: 'current-user-id' // TODO: получить реальный ID пользователя
+      const result = await companyApi.createCompany({
+        name: companyName
       });
       
       // Редирект на дашборд новой компании
-      onComplete(newCompany.id);
+      onComplete(result.companyId);
     } catch (error) {
       console.error('Ошибка создания компании:', error);
       setError('Не удалось создать компанию');

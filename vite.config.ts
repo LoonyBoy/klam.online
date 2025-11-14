@@ -57,5 +57,19 @@
       port: 3000,
       open: true,
       host: true,
+      allowedHosts: [
+        'localhost',
+        '.ngrok-free.dev',
+        '.ngrok-free.app',
+        '.ngrok.io',
+      ],
+      proxy: {
+        // Перенаправляем все API запросы на backend
+        '/api': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false,
+        }
+      }
     },
   });

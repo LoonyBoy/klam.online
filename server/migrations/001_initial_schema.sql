@@ -305,13 +305,7 @@ CREATE TABLE album_events (
         ON DELETE SET NULL,
     CONSTRAINT fk_album_events_created_by_participant
         FOREIGN KEY (created_by_participant_id) REFERENCES participants(id)
-        ON DELETE SET NULL,
-    CONSTRAINT chk_album_events_author
-        CHECK (
-            (created_by_user_id IS NOT NULL AND created_by_participant_id IS NULL)
-            OR
-            (created_by_user_id IS NULL AND created_by_participant_id IS NOT NULL)
-        )
+        ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='История изменений статусов альбомов';
 
 

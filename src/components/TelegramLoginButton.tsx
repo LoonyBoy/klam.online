@@ -40,12 +40,22 @@ export function TelegramLoginButton({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    console.log('🔧 TelegramLoginButton: Инициализация...');
+    
     // Удаляем @ если есть
     const cleanBotName = botName.replace('@', '');
+    console.log('🤖 Bot name:', cleanBotName);
 
     // Создаем глобальную функцию для callback
     const callbackName = 'onTelegramAuth';
-    (window as any)[callbackName] = dataOnauth;
+    (window as any)[callbackName] = (user: TelegramUser) => {
+      console.log('✅ TelegramLoginButton: Callback вызван!');
+      console.log('📦 Данные от Telegram:', user);
+      dataOnauth(user);
+    };
+
+    console.log('📝 Создана глобальная функция:', callbackName);
+    console.log('🌐 window.onTelegramAuth доступна:', typeof (window as any)[callbackName]);
 
     // Создаем скрипт виджета
     const script = document.createElement('script');
@@ -60,21 +70,33 @@ export function TelegramLoginButton({
     }
 
     if (dataAuthUrl) {
+      console.log('📍 Используется data-auth-url:', dataAuthUrl);
       script.setAttribute('data-auth-url', dataAuthUrl);
     } else {
+      console.log('📍 Используется data-onauth:', callbackName);
       script.setAttribute('data-onauth', callbackName);
     }
 
     script.async = true;
+    
+    script.onload = () => {
+      console.log('✅ Telegram Widget скрипт загружен');
+    };
+    
+    script.onerror = () => {
+      console.error('❌ Ошибка загрузки Telegram Widget скрипта');
+    };
 
     // Очищаем контейнер и добавляем скрипт
     if (containerRef.current) {
       containerRef.current.innerHTML = '';
       containerRef.current.appendChild(script);
+      console.log('✅ Скрипт добавлен в DOM');
     }
 
     // Cleanup
     return () => {
+      console.log('🧹 TelegramLoginButton: Cleanup');
       if (containerRef.current) {
         containerRef.current.innerHTML = '';
       }
