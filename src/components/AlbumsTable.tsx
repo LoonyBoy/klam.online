@@ -625,8 +625,8 @@ export function AlbumsTable({
           </SelectTrigger>
           <SelectContent className="z-[100]">
             <SelectItem value="all">Все отделы</SelectItem>
-            {departments.slice(1).map(dept => (
-              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+            {departments.slice(1).map((dept, index) => (
+              <SelectItem key={`dept-${index}-${dept}`} value={dept}>{dept}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -637,8 +637,8 @@ export function AlbumsTable({
           </SelectTrigger>
           <SelectContent className="z-[100]">
             <SelectItem value="all">Все исполнители</SelectItem>
-            {executorFilters.slice(1).map(exec => (
-              <SelectItem key={exec} value={exec}>{exec}</SelectItem>
+            {executorFilters.slice(1).map((exec, index) => (
+              <SelectItem key={`exec-${index}-${exec}`} value={exec}>{exec}</SelectItem>
             ))}
           </SelectContent>
         </Select>

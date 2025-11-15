@@ -503,3 +503,114 @@ export async function getAlbumTemplates(req: Request, res: Response) {
   }
 }
 
+/**
+ * POST /api/companies/:companyId/projects/:projectId/albums
+ * Создать новый альбом в проекте
+ */
+export async function createAlbum(req: Request, res: Response) {
+  const connection = await pool.getConnection();
+  
+  try {
+    const { companyId, projectId } = req.params;
+    const { 
+      name, 
+      code, 
+      departmentId, 
+      executorId, 
+      customerId, 
+      deadline, 
+      comment, 
+      link 
+    } = req.body;
+
+    const userId = (req as any).user?.id;
+
+    console.log('📥 Creating album:', { 
+      companyId, 
+      projectId, 
+      name, 
+      code, 
+      departmentId, 
+      executorId, 
+      customerId,
+      userId 
+    });
+
+    // Валидация обязательных полей
+    if (!name || !code || !departmentId) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: name, code, departmentId' 
+      });
+    }
+
+    // Проверяем, что проект принадлежит компании
+    const [projectRows] = await connection.query<RowDataPacket[]>(
+      'SELECT id FROM projects WHERE id = ? AND company_id = ?',
+      [projectId, companyId]
+    );
+
+    if (projectRows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    await connection.beginTransaction();
+
+    // Получаем статус "Ожидание" (pending) по умолчанию
+    const [statusRows] = await connection.query<RowDataPacket[]>(
+      "SELECT id FROM album_statuses WHERE code = 'pending' LIMIT 1"
+    );
+
+    const defaultStatusId = statusRows[0]?.id || 4; // 4 - это ID статуса pending из вашей БД
+
+    // Создаем альбом
+    const [result] = await connection.query<any>(
+      `INSERT INTO albums 
+        (project_id, name, code, department_id, executor_id, customer_id, 
+         deadline, status_id, last_status_at, comment, link, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)`,
+      [
+        projectId, 
+        name, 
+        code, 
+        departmentId, 
+        executorId || null, 
+        customerId || null, 
+        deadline || null,
+        defaultStatusId,
+        comment || null,
+        link || null,
+        userId
+      ]
+    );
+
+    const albumId = result.insertId;
+
+    // Создаем первое событие для альбома - статус "Ожидание" (pending)
+    await connection.query(
+      `INSERT INTO album_events 
+        (album_id, status_id, comment, created_by_user_id, source)
+       VALUES (?, ?, ?, ?, 'web')`,
+      [albumId, defaultStatusId, 'Альбом создан', userId]
+    );
+
+    await connection.commit();
+
+    console.log(`✅ Album created with ID: ${albumId}, status: pending`);
+
+    res.status(201).json({
+      success: true,
+      albumId,
+      message: 'Album created successfully'
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('❌ Error creating album:', error);
+    res.status(500).json({
+      error: 'Failed to create album',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    connection.release();
+  }
+}

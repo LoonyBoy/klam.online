@@ -137,6 +137,86 @@ export const getCompanyUsersStats = async (req: Request, res: Response) => {
 };
 
 /**
+ * Получить участников компании (participants)
+ * Возвращает активных участников для использования в выпадающих списках
+ */
+export const getCompanyParticipants = async (req: Request, res: Response) => {
+  try {
+    const { companyId } = req.params;
+
+    // Проверяем, есть ли колонка department_id в таблице participants
+    const [columns] = await pool.query<RowDataPacket[]>(
+      `SHOW COLUMNS FROM participants LIKE 'department_id'`
+    );
+    
+    const hasDepartmentId = columns.length > 0;
+
+    // Получаем всех активных участников компании
+    let query;
+    if (hasDepartmentId) {
+      query = `SELECT 
+        p.id,
+        p.telegram_id,
+        p.telegram_username,
+        p.first_name,
+        p.last_name,
+        p.email,
+        p.role_type,
+        p.department_id,
+        d.code as department_code,
+        d.name as department_name
+      FROM participants p
+      LEFT JOIN departments d ON p.department_id = d.id
+      WHERE p.company_id = ? AND p.is_active = 1
+      ORDER BY p.first_name, p.last_name`;
+    } else {
+      query = `SELECT 
+        p.id,
+        p.telegram_id,
+        p.telegram_username,
+        p.first_name,
+        p.last_name,
+        p.email,
+        p.role_type
+      FROM participants p
+      WHERE p.company_id = ? AND p.is_active = 1
+      ORDER BY p.first_name, p.last_name`;
+    }
+
+    const [participantRows] = await pool.query<RowDataPacket[]>(query, [companyId]);
+
+    // Формируем ответ
+    const participants = participantRows.map((row: any) => {
+      let department = null;
+      
+      if (hasDepartmentId && row.department_id) {
+        department = {
+          id: row.department_id,
+          code: row.department_code,
+          name: row.department_name
+        };
+      }
+
+      return {
+        id: row.id,
+        telegramId: row.telegram_id,
+        telegramUsername: row.telegram_username,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        email: row.email,
+        roleType: row.role_type,
+        department
+      };
+    });
+
+    res.json(participants);
+  } catch (error) {
+    console.error('❌ Error fetching company participants:', error);
+    res.status(500).json({ error: 'Failed to fetch company participants' });
+  }
+};
+
+/**
  * Добавить участника (participant) в компанию
  */
 export const addParticipant = async (req: Request, res: Response) => {
@@ -235,13 +315,27 @@ export const addParticipant = async (req: Request, res: Response) => {
  * Удалить участника (мягкое удаление - установка is_active = 0)
  */
 export const deleteParticipant = async (req: Request, res: Response) => {
+  const connection = await pool.getConnection();
+  
   try {
     const { companyId, participantId } = req.params;
 
     console.log('🗑️ Deleting participant:', { companyId, participantId });
 
-    // Мягкое удаление - устанавливаем is_active = 0
-    const [result] = await pool.query(
+    // Начинаем транзакцию
+    await connection.beginTransaction();
+
+    // 1. Удаляем все связи участника с проектами
+    await connection.query(
+      `DELETE FROM project_participants 
+       WHERE participant_id = ?`,
+      [participantId]
+    );
+
+    console.log('✅ Removed participant from all projects');
+
+    // 2. Мягкое удаление участника - устанавливаем is_active = 0
+    const [result] = await connection.query(
       `UPDATE participants 
        SET is_active = 0 
        WHERE id = ? AND company_id = ?`,
@@ -249,9 +343,13 @@ export const deleteParticipant = async (req: Request, res: Response) => {
     );
 
     if ((result as any).affectedRows === 0) {
+      await connection.rollback();
+      connection.release();
       return res.status(404).json({ error: 'Participant not found' });
     }
 
+    // Коммитим транзакцию
+    await connection.commit();
     console.log('✅ Participant deleted successfully');
 
     return res.json({
@@ -259,8 +357,11 @@ export const deleteParticipant = async (req: Request, res: Response) => {
       message: 'Participant deleted successfully'
     });
   } catch (error) {
+    await connection.rollback();
     console.error('❌ Error deleting participant:', error);
     return res.status(500).json({ error: 'Failed to delete participant' });
+  } finally {
+    connection.release();
   }
 };
 

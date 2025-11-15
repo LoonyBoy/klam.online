@@ -9,7 +9,7 @@ import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
-import { getCompanyParticipants, checkTelegramChannel, createParticipant } from '../lib/companyApi';
+import { checkTelegramChannel, createParticipant, companyApi } from '../lib/companyApi';
 import { 
   Plus, 
   Trash2, 
@@ -125,9 +125,15 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
         return;
       }
 
-      const result = await getCompanyParticipants(companyId);
-      if (result.users) {
-        setAvailableParticipants(result.users);
+      const participants = await companyApi.getCompanyParticipants(companyId);
+      console.log('📊 Loaded participants:', participants);
+      
+      // API возвращает массив участников напрямую
+      if (Array.isArray(participants)) {
+        setAvailableParticipants(participants);
+      } else if (participants.users && Array.isArray(participants.users)) {
+        // Обратная совместимость, если API вернет объект с полем users
+        setAvailableParticipants(participants.users);
       }
     } catch (error) {
       console.error('Ошибка загрузки участников:', error);
@@ -150,12 +156,25 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
   };
 
   const handleComplete = () => {
+    // Преобразуем users, заменяя departmentId на departmentCode и client на customer
+    const usersWithDepartmentCode = users.map(user => {
+      const department = departments.find(d => d.id === user.departmentId);
+      return {
+        ...user,
+        departmentCode: department?.code || '',
+        // Преобразуем 'client' в 'customer' для соответствия схеме БД
+        role: user.role === 'client' ? 'customer' : user.role,
+        // Убираем departmentId, чтобы не было путаницы
+        departmentId: undefined
+      };
+    });
+
     const projectData = {
       projectName,
       projectCode,
       clientCompany,
       departments,
-      users,
+      users: usersWithDepartmentCode,
       channelUrl,
       albums: [...albumsPD, ...albumsRD],
     };

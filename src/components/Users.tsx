@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Plus, Edit, Users as UsersIcon, UserCheck, UserCog, Edit2, Trash2 } from 'lucide-react';
-import { getCompanyUsers, getCompanyUsersStats, addParticipant, getDepartments, deleteParticipant, updateParticipant } from '../lib/companyApi';
+import { getCompanyUsers, getCompanyUsersStats, addParticipant, getDepartments, updateParticipant, companyApi } from '../lib/companyApi';
 
 interface User {
   id: string;
@@ -201,7 +201,7 @@ export function Users() {
         return;
       }
 
-      await deleteParticipant(companyId, userId);
+      await companyApi.deleteParticipant(companyId, userId);
       console.log('✅ Участник успешно удалён');
       
       // Перезагружаем список пользователей

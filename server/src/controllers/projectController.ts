@@ -233,12 +233,11 @@ export async function createProject(req: Request, res: Response) {
     const participantIds: number[] = [];
 
     for (const user of users) {
-      const departmentId = departmentMap.get(
-        departments.find((d: any) => d.id === user.departmentId)?.code
-      );
+      // Используем departmentCode, который должен быть передан с клиента
+      const departmentId = departmentMap.get(user.departmentCode);
 
       if (!departmentId) {
-        console.warn(`⚠️ Department not found for user ${user.name}`);
+        console.warn(`⚠️ Department not found for user ${user.name}, code: ${user.departmentCode}`);
         continue;
       }
 
@@ -331,6 +330,123 @@ export async function createProject(req: Request, res: Response) {
     res.status(500).json({
       success: false,
       error: 'Failed to create project',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * DELETE /api/companies/:companyId/projects/:projectId
+ * Удалить проект
+ */
+export async function deleteProject(req: Request, res: Response) {
+  const connection = await pool.getConnection();
+  
+  try {
+    const { companyId, projectId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      connection.release();
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized'
+      });
+    }
+
+    console.log('🗑️ Deleting project:', { companyId, projectId, userId });
+
+    // Проверяем права пользователя в компании
+    const [userCompanies] = await connection.query<RowDataPacket[]>(
+      `SELECT role_in_company FROM company_users WHERE company_id = ? AND user_id = ?`,
+      [companyId, userId]
+    );
+
+    if (userCompanies.length === 0) {
+      connection.release();
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    const userRole = userCompanies[0].role_in_company;
+    if (userRole !== 'owner' && userRole !== 'admin') {
+      connection.release();
+      return res.status(403).json({
+        success: false,
+        error: 'Only owners and admins can delete projects'
+      });
+    }
+
+    // Проверяем, что проект принадлежит компании
+    const [projects] = await connection.query<RowDataPacket[]>(
+      `SELECT id FROM projects WHERE id = ? AND company_id = ?`,
+      [projectId, companyId]
+    );
+
+    if (projects.length === 0) {
+      connection.release();
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found'
+      });
+    }
+
+    // Начинаем транзакцию
+    await connection.beginTransaction();
+
+    // Удаляем связанные данные в правильном порядке
+    
+    // 1. Удаляем участников проекта
+    await connection.query(
+      `DELETE FROM project_participants WHERE project_id = ?`,
+      [projectId]
+    );
+
+    // 2. Удаляем отделы проекта
+    await connection.query(
+      `DELETE FROM project_departments WHERE project_id = ?`,
+      [projectId]
+    );
+
+    // 3. Удаляем каналы проекта
+    await connection.query(
+      `DELETE FROM project_channels WHERE project_id = ?`,
+      [projectId]
+    );
+
+    // 4. Удаляем альбомы проекта (если есть связанные таблицы)
+    // TODO: Добавить удаление альбомов и их данных
+
+    // 5. Удаляем сам проект
+    await connection.query(
+      `DELETE FROM projects WHERE id = ?`,
+      [projectId]
+    );
+
+    // Коммитим транзакцию
+    await connection.commit();
+
+    console.log(`✅ Project deleted successfully`);
+
+    res.json({
+      success: true,
+      message: 'Project deleted successfully'
+    });
+
+  } catch (error) {
+    // Откатываем транзакцию при ошибке
+    await connection.rollback();
+    
+    console.error('❌ Error in deleteProject:', error);
+    console.error('❌ Stack:', error instanceof Error ? error.stack : 'No stack');
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete project',
       details: error instanceof Error ? error.message : String(error)
     });
   } finally {
@@ -447,7 +563,7 @@ export async function getProjectDetails(req: Request, res: Response) {
       }));
 
     const clients = participants
-      .filter(p => p.role_type === 'client')
+      .filter(p => p.role_type === 'customer')
       .map(p => ({
         id: p.id.toString(),
         participantId: p.id,

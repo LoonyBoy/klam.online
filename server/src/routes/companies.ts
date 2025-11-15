@@ -27,8 +27,14 @@ router.get('/:companyId/projects/:projectId', authenticateToken, projectControll
 // Получить альбомы проекта (требует аутентификацию)
 router.get('/:companyId/projects/:projectId/albums', authenticateToken, albumController.getProjectAlbums);
 
+// Создать альбом в проекте (требует аутентификацию)
+router.post('/:companyId/projects/:projectId/albums', authenticateToken, albumController.createAlbum);
+
 // Создать новый проект (требует аутентификацию)
 router.post('/:companyId/projects', authenticateToken, projectController.createProject);
+
+// Удалить проект (требует аутентификацию)
+router.delete('/:companyId/projects/:projectId', authenticateToken, projectController.deleteProject);
 
 // Получить статистику по альбомам компании (требует аутентификацию)
 router.get('/:companyId/albums/statistics', authenticateToken, albumController.getAlbumsStatistics);
@@ -62,6 +68,9 @@ router.get('/:companyId/users', authenticateToken, userController.getCompanyUser
 
 // Получить статистику по пользователям компании (требует аутентификацию)
 router.get('/:companyId/users/stats', authenticateToken, userController.getCompanyUsersStats);
+
+// Получить участников компании (требует аутентификацию)
+router.get('/:companyId/participants', authenticateToken, userController.getCompanyParticipants);
 
 // Добавить участника в компанию (требует аутентификацию)
 router.post('/:companyId/participants', authenticateToken, userController.addParticipant);

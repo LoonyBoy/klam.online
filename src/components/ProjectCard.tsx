@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
-import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { 
@@ -53,11 +52,13 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   const [isAddExecutorOpen, setIsAddExecutorOpen] = useState(false);
   const [isAddClientOpen, setIsAddClientOpen] = useState(false);
   
+  // Списки доступных участников компании
+  const [availableExecutors, setAvailableExecutors] = useState<any[]>([]);
+  const [availableClients, setAvailableClients] = useState<any[]>([]);
+  const [isLoadingParticipants, setIsLoadingParticipants] = useState(false);
+  
   // Форма добавления пользователя
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserTelegram, setNewUserTelegram] = useState('');
-  const [newUserDepartment, setNewUserDepartment] = useState('');
+  const [selectedParticipantId, setSelectedParticipantId] = useState('');
 
   // Загрузка данных проекта при монтировании компонента
   useEffect(() => {
@@ -93,6 +94,39 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       toast.error('Ошибка при загрузке проекта');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadAvailableParticipants = async () => {
+    try {
+      setIsLoadingParticipants(true);
+      const companyId = localStorage.getItem('companyId');
+      
+      if (!companyId) {
+        return;
+      }
+
+      const response = await companyApi.getCompanyParticipants(companyId);
+      
+      if (response.success && response.participants) {
+        // Фильтруем участников, которые ещё не добавлены в проект
+        const currentExecutorIds = executors.map(e => e.id);
+        const currentClientIds = clients.map(c => c.id);
+        
+        const executorsList = response.participants
+          .filter((p: any) => p.roleType === 'executor' && !currentExecutorIds.includes(p.id.toString()));
+        
+        const clientsList = response.participants
+          .filter((p: any) => p.roleType === 'customer' && !currentClientIds.includes(p.id.toString()));
+        
+        setAvailableExecutors(executorsList);
+        setAvailableClients(clientsList);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load participants:', error);
+      toast.error('Не удалось загрузить список участников');
+    } finally {
+      setIsLoadingParticipants(false);
     }
   };
 
@@ -136,66 +170,99 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   };
 
   // Функции управления пользователями
-  const handleAddExecutor = () => {
-    if (!newUserName || !newUserEmail || !newUserDepartment) {
-      toast.error('Заполните все обязательные поля');
+  const handleAddExecutor = async () => {
+    if (!selectedParticipantId) {
+      toast.error('Выберите исполнителя');
       return;
     }
 
-    const newExecutor: UserType = {
-      id: Date.now().toString(),
-      name: newUserName,
-      email: newUserEmail,
-      telegramId: newUserTelegram,
-      role: 'executor',
-      department: newUserDepartment
-    };
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Не удалось определить компанию');
+        return;
+      }
 
-    setExecutors([...executors, newExecutor]);
-    setIsAddExecutorOpen(false);
-    resetForm();
-    toast.success('Исполнитель добавлен');
+      // TODO: Добавить API для добавления участника в проект
+      // await companyApi.addParticipantToProject(companyId, projectId, selectedParticipantId);
+      
+      toast.success('Исполнитель добавлен');
+      setIsAddExecutorOpen(false);
+      setSelectedParticipantId('');
+      
+      // Перезагружаем данные проекта
+      await loadProjectDetails();
+    } catch (error) {
+      console.error('❌ Error adding executor:', error);
+      toast.error('Не удалось добавить исполнителя');
+    }
   };
 
-  const handleAddClient = () => {
-    if (!newUserName || !newUserEmail || !newUserDepartment) {
-      toast.error('Заполните все обязательные поля');
+  const handleAddClient = async () => {
+    if (!selectedParticipantId) {
+      toast.error('Выберите заказчика');
       return;
     }
 
-    const newClient: UserType = {
-      id: Date.now().toString(),
-      name: newUserName,
-      email: newUserEmail,
-      telegramId: newUserTelegram,
-      role: 'client',
-      department: newUserDepartment
-    };
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Не удалось определить компанию');
+        return;
+      }
 
-    setClients([...clients, newClient]);
-    setIsAddClientOpen(false);
-    resetForm();
-    toast.success('Заказчик добавлен');
+      // TODO: Добавить API для добавления участника в проект
+      // await companyApi.addParticipantToProject(companyId, projectId, selectedParticipantId);
+      
+      toast.success('Заказчик добавлен');
+      setIsAddClientOpen(false);
+      setSelectedParticipantId('');
+      
+      // Перезагружаем данные проекта
+      await loadProjectDetails();
+    } catch (error) {
+      console.error('❌ Error adding client:', error);
+      toast.error('Не удалось добавить заказчика');
+    }
   };
 
-  const handleRemoveExecutor = (id: string) => {
-    setExecutors(executors.filter(e => e.id !== id));
-    toast.success('Исполнитель удалён');
+  const handleRemoveExecutor = async (id: string) => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Не удалось определить компанию');
+        return;
+      }
+
+      await companyApi.deleteParticipant(companyId, id);
+      toast.success('Исполнитель удалён из всех проектов');
+      
+      // Перезагружаем данные проекта
+      await loadProjectDetails();
+    } catch (error) {
+      console.error('❌ Error removing executor:', error);
+      toast.error('Не удалось удалить исполнителя');
+    }
   };
 
-  const handleRemoveClient = (id: string) => {
-    setClients(clients.filter(c => c.id !== id));
-    toast.success('Заказчик удалён');
-  };
+  const handleRemoveClient = async (id: string) => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Не удалось определить компанию');
+        return;
+      }
 
-  const resetForm = () => {
-    setNewUserName('');
-    setNewUserEmail('');
-    setNewUserTelegram('');
-    setNewUserDepartment('');
+      await companyApi.deleteParticipant(companyId, id);
+      toast.success('Заказчик удалён из всех проектов');
+      
+      // Перезагружаем данные проекта
+      await loadProjectDetails();
+    } catch (error) {
+      console.error('❌ Error removing client:', error);
+      toast.error('Не удалось удалить заказчика');
+    }
   };
-
-  const departments = project.departments?.map((d: any) => d.name) || [];
 
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
@@ -413,62 +480,73 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       </div>
 
       {/* Диалог добавления исполнителя */}
-      <Dialog open={isAddExecutorOpen} onOpenChange={setIsAddExecutorOpen}>
+      <Dialog open={isAddExecutorOpen} onOpenChange={(open) => {
+        setIsAddExecutorOpen(open);
+        if (open) {
+          loadAvailableParticipants();
+        } else {
+          setSelectedParticipantId('');
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Добавить исполнителя</DialogTitle>
             <DialogDescription>
-              Заполните информацию о новом исполнителе проекта
+              Выберите исполнителя из списка участников компании
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="exec-name">Имя и фамилия *</Label>
-              <Input 
-                id="exec-name" 
-                placeholder="Иванов Иван"
-                value={newUserName}
-                onChange={(e) => setNewUserName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="exec-email">Email *</Label>
-              <Input 
-                id="exec-email" 
-                type="email"
-                placeholder="ivanov@company.ru"
-                value={newUserEmail}
-                onChange={(e) => setNewUserEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="exec-telegram">Telegram</Label>
-              <Input 
-                id="exec-telegram" 
-                placeholder="@ivanov"
-                value={newUserTelegram}
-                onChange={(e) => setNewUserTelegram(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="exec-department">Отдел *</Label>
-              <Select value={newUserDepartment} onValueChange={setNewUserDepartment}>
-                <SelectTrigger id="exec-department">
-                  <SelectValue placeholder="Выберите отдел" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((dept: string) => (
-                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {isLoadingParticipants ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="text-sm text-gray-500 mt-2">Загрузка...</p>
+              </div>
+            ) : availableExecutors.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <UsersIcon className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Нет доступных исполнителей</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Выберите исполнителя *</Label>
+                <Select value={selectedParticipantId} onValueChange={setSelectedParticipantId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Выберите из списка" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableExecutors.map((participant: any) => (
+                      <SelectItem key={participant.id} value={participant.id.toString()}>
+                        <div className="flex flex-col">
+                          <span className="font-medium">
+                            {participant.firstName} {participant.lastName}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {participant.email} {participant.departmentName ? `• ${participant.departmentName}` : ''}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => { setIsAddExecutorOpen(false); resetForm(); }} className="flex-1">
+            <Button 
+              variant="outline" 
+              onClick={() => { 
+                setIsAddExecutorOpen(false); 
+                setSelectedParticipantId('');
+              }} 
+              className="flex-1"
+            >
               Отмена
             </Button>
-            <Button onClick={handleAddExecutor} className="flex-1">
+            <Button 
+              onClick={handleAddExecutor} 
+              className="flex-1"
+              disabled={!selectedParticipantId || isLoadingParticipants}
+            >
               Добавить
             </Button>
           </div>
@@ -476,58 +554,73 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       </Dialog>
 
       {/* Диалог добавления заказчика */}
-      <Dialog open={isAddClientOpen} onOpenChange={setIsAddClientOpen}>
+      <Dialog open={isAddClientOpen} onOpenChange={(open) => {
+        setIsAddClientOpen(open);
+        if (open) {
+          loadAvailableParticipants();
+        } else {
+          setSelectedParticipantId('');
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Добавить заказчика</DialogTitle>
             <DialogDescription>
-              Заполните информацию о новом представителе заказчика
+              Выберите заказчика из списка участников компании
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="client-name">Имя и фамилия *</Label>
-              <Input 
-                id="client-name" 
-                placeholder="Петров Петр"
-                value={newUserName}
-                onChange={(e) => setNewUserName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="client-email">Email *</Label>
-              <Input 
-                id="client-email" 
-                type="email"
-                placeholder="petrov@client.ru"
-                value={newUserEmail}
-                onChange={(e) => setNewUserEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="client-telegram">Telegram</Label>
-              <Input 
-                id="client-telegram" 
-                placeholder="@petrov"
-                value={newUserTelegram}
-                onChange={(e) => setNewUserTelegram(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="client-department">Отдел *</Label>
-              <Input 
-                id="client-department" 
-                placeholder="Отдел заказчика"
-                value={newUserDepartment}
-                onChange={(e) => setNewUserDepartment(e.target.value)}
-              />
-            </div>
+            {isLoadingParticipants ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                <p className="text-sm text-gray-500 mt-2">Загрузка...</p>
+              </div>
+            ) : availableClients.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <User className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Нет доступных заказчиков</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Выберите заказчика *</Label>
+                <Select value={selectedParticipantId} onValueChange={setSelectedParticipantId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Выберите из списка" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableClients.map((participant: any) => (
+                      <SelectItem key={participant.id} value={participant.id.toString()}>
+                        <div className="flex flex-col">
+                          <span className="font-medium">
+                            {participant.firstName} {participant.lastName}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {participant.email} {participant.departmentName ? `• ${participant.departmentName}` : ''}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => { setIsAddClientOpen(false); resetForm(); }} className="flex-1">
+            <Button 
+              variant="outline" 
+              onClick={() => { 
+                setIsAddClientOpen(false); 
+                setSelectedParticipantId('');
+              }} 
+              className="flex-1"
+            >
               Отмена
             </Button>
-            <Button onClick={handleAddClient} className="flex-1">
+            <Button 
+              onClick={handleAddClient} 
+              className="flex-1"
+              disabled={!selectedParticipantId || isLoadingParticipants}
+            >
               Добавить
             </Button>
           </div>

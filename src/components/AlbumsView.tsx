@@ -63,14 +63,36 @@ export function AlbumsView({
   const handleQuickAdd = async (albumData: any) => {
     try {
       console.log('Quick add album:', albumData);
-      toast.info('Функция добавления альбома будет реализована позже');
-      // TODO: Implement API call to create album
-      // const companyId = localStorage.getItem('companyId');
-      // await companyApi.createAlbum(companyId, projectId, albumData);
-      // await loadAlbums();
+      
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Компания не найдена');
+        return;
+      }
+
+      // Преобразуем данные формы в формат API
+      const apiData = {
+        name: albumData.name,
+        code: albumData.code,
+        departmentId: parseInt(albumData.department),
+        executorId: albumData.executor ? parseInt(albumData.executor) : undefined,
+        customerId: albumData.customer ? parseInt(albumData.customer) : undefined,
+        deadline: albumData.deadline || undefined,
+        comment: albumData.comment || undefined,
+        link: albumData.albumLink || undefined,
+      };
+
+      // Создаем альбом через API
+      await companyApi.createAlbum(companyId, projectId, apiData);
+      
+      toast.success('Альбом успешно создан');
+      
+      // Обновляем список альбомов
+      await loadAlbums();
+      
     } catch (error) {
       console.error('Failed to add album:', error);
-      toast.error('Ошибка при добавлении альбома');
+      toast.error(error instanceof Error ? error.message : 'Ошибка при добавлении альбома');
     } finally {
       setIsAddingAlbum(false);
     }

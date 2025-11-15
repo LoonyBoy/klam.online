@@ -230,6 +230,35 @@ export const companyApi = {
     return data;
   },
 
+  // Создать альбом в проекте
+  async createAlbum(companyId: string, projectId: string, albumData: {
+    name: string;
+    code: string;
+    departmentId: number;
+    executorId?: number;
+    customerId?: number;
+    deadline?: string;
+    comment?: string;
+    link?: string;
+  }): Promise<any> {
+    console.log('📤 Creating album:', { companyId, projectId, albumData });
+    
+    const response = await fetch(`/api/companies/${companyId}/projects/${projectId}/albums`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(albumData)
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'Failed to create album');
+    }
+
+    const data = await response.json();
+    console.log('✅ Album created:', data);
+    return data;
+  },
+
   // Получить статистику по альбомам компании
   async getAlbumsStatistics(companyId: string): Promise<{ activeRemarks: number }> {
     console.log('📤 Fetching albums statistics:', companyId);
@@ -420,6 +449,62 @@ export const companyApi = {
     
     // TODO: Реализовать реальный API запрос
     return [];
+  },
+
+  // Получить список участников компании (participants)
+  async getCompanyParticipants(companyId: string): Promise<any> {
+    console.log('📤 Fetching participants for company:', companyId);
+    
+    const response = await fetch(`http://localhost:3001/api/companies/${companyId}/participants`, {
+      method: 'GET',
+      headers: getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ Server error:', error);
+      throw new Error(error.error || 'Failed to fetch participants');
+    }
+
+    const data = await response.json();
+    console.log('✅ Participants received:', data);
+    return data;
+  },
+
+  // Удалить участника из компании и всех проектов
+  async deleteParticipant(companyId: string, participantId: string) {
+    console.log('🗑️ Deleting participant:', participantId);
+    
+    const response = await fetch(`http://localhost:3001/api/companies/${companyId}/participants/${participantId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ Server error:', error);
+      throw new Error(error.error || 'Failed to delete participant');
+    }
+    
+    return response.json();
+  },
+
+  // Удалить проект
+  async deleteProject(companyId: string, projectId: string) {
+    console.log('🗑️ Deleting project:', projectId);
+    
+    const response = await fetch(`http://localhost:3001/api/companies/${companyId}/projects/${projectId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ Server error:', error);
+      throw new Error(error.details || error.error || 'Failed to delete project');
+    }
+    
+    return response.json();
   }
 };
 
@@ -524,26 +609,6 @@ export async function getFilteredEvents(companyId: string, filters?: {
 }
 
 /**
- * Удалить участника из компании
- */
-export async function deleteParticipant(companyId: string, participantId: string) {
-  console.log('🗑️ Deleting participant:', participantId);
-  
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/participants/${participantId}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders()
-  });
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    console.error('❌ Server error:', error);
-    throw new Error(error.error || 'Failed to delete participant');
-  }
-  
-  return response.json();
-}
-
-/**
  * Обновить участника компании
  */
 export async function updateParticipant(companyId: string, participantId: string, data: {
@@ -633,19 +698,6 @@ export async function updateCompanySettings(companyId: string, data: {
   return response.json();
 }
 
-// Get company participants
-export async function getCompanyParticipants(companyId: string): Promise<any> {
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/users`, {
-    headers: getAuthHeaders()
-  });
-  
-  if (!response.ok) {
-    throw new Error('Failed to get company participants');
-  }
-  
-  return response.json();
-}
-
 // Create new project
 export async function createProject(companyId: string, projectData: {
   projectName: string;
@@ -661,11 +713,13 @@ export async function createProject(companyId: string, projectData: {
     name: string;
     telegramUsername: string;
     email: string;
-    departmentId: string;
-    role: 'executor' | 'client';
+    departmentCode: string;
+    role: 'executor' | 'customer';
   }>;
   channelUrl: string;
 }): Promise<any> {
+  console.log('🚀 Отправка запроса на создание проекта:', projectData);
+  
   const response = await fetch(`http://localhost:3001/api/companies/${companyId}/projects`, {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -674,7 +728,8 @@ export async function createProject(companyId: string, projectData: {
   
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || 'Failed to create project');
+    console.error('❌ Ошибка от сервера:', error);
+    throw new Error(error.details || error.error || 'Failed to create project');
   }
   
   return response.json();

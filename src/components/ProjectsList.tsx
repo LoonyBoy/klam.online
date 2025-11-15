@@ -4,10 +4,20 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Plus, Search, Filter, FolderKanban, TrendingUp, ExternalLink } from 'lucide-react';
+import { Plus, Search, Filter, FolderKanban, TrendingUp, ExternalLink, Trash2 } from 'lucide-react';
 import { CreateProjectWizard } from './CreateProjectWizard';
 import { companyApi, createProject } from '../lib/companyApi';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 
 interface ProjectsListProps {
   onNavigateToProject: (projectId: string) => void;
@@ -20,6 +30,7 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<any>(null);
 
   useEffect(() => {
     loadProjects();
@@ -65,6 +76,7 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
 
   const handleProjectComplete = async (projectData: any) => {
     console.log('Создан новый проект:', projectData);
+    console.log('📤 Отправляемые данные:', JSON.stringify(projectData, null, 2));
     
     try {
       const companyId = localStorage.getItem('companyId');
@@ -85,6 +97,28 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
     } catch (error) {
       console.error('Ошибка при создании проекта:', error);
       toast.error(error instanceof Error ? error.message : 'Не удалось создать проект');
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Компания не выбрана');
+        return;
+      }
+
+      await companyApi.deleteProject(companyId, projectToDelete.id);
+      
+      toast.success(`Проект "${projectToDelete.name}" успешно удалён`);
+      loadProjects();
+    } catch (error) {
+      console.error('Ошибка при удалении проекта:', error);
+      toast.error('Не удалось удалить проект');
+    } finally {
+      setProjectToDelete(null);
     }
   };
 
@@ -249,6 +283,32 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
                         <Badge variant="outline">{project.stats.activeAlbums} / {project.stats.totalAlbums}</Badge>
                       </div>
                     </div>
+                    <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="flex-1 gap-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNavigateToProject(project.id);
+                        }}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Открыть
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="hover:bg-red-100 hover:text-red-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProjectToDelete(project);
+                        }}
+                        title="Удалить"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -301,18 +361,32 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
                           </Badge>
                         </td>
                         <td className="py-4 px-4">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            className="gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onNavigateToProject(project.id);
-                            }}
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                            Открыть
-                          </Button>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="gap-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onNavigateToProject(project.id);
+                              }}
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                              Открыть
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="hover:bg-red-100 hover:text-red-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setProjectToDelete(project);
+                              }}
+                              title="Удалить проект"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -331,6 +405,30 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
         onComplete={handleProjectComplete}
         companyId={localStorage.getItem('companyId') || '1'}
       />
+
+      {/* Диалог подтверждения удаления */}
+      <AlertDialog open={!!projectToDelete} onOpenChange={() => setProjectToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить проект?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вы уверены, что хотите удалить проект <strong>{projectToDelete?.name}</strong> ({projectToDelete?.code})?
+              <br />
+              <br />
+              Это действие нельзя будет отменить. Все данные проекта, включая альбомы и файлы, будут удалены.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteProject}
+              className="!bg-red-600 hover:!bg-red-700 !text-white"
+            >
+              Удалить проект
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
