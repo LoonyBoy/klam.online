@@ -281,17 +281,18 @@ export async function getFilteredEvents(req: Request, res: Response) {
  * GET /api/companies/:companyId/projects/:projectId/albums
  * Получить альбомы проекта
  */
-export async function getProjectAlbums(req: Request, res: Response) {
+export async function getProjectAlbums(req: Request, res: Response): Promise<void> {
   try {
     const { companyId, projectId } = req.params;
     const category = req.query.category as string; // 'СВОК ПД' или 'СВОК РД'
     const userId = (req as any).user?.id;
 
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Unauthorized'
       });
+      return;
     }
 
     console.log('📥 Запрос альбомов проекта:', { companyId, projectId, category, userId });
@@ -305,10 +306,11 @@ export async function getProjectAlbums(req: Request, res: Response) {
     );
 
     if (projects.length === 0) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Project not found'
       });
+      return;
     }
 
     // Получаем альбомы проекта
@@ -317,9 +319,11 @@ export async function getProjectAlbums(req: Request, res: Response) {
         a.id,
         a.name,
         a.code,
+        a.category,
         a.deadline,
         a.comment,
         a.link,
+        a.last_status_at,
         a.created_at,
         a.updated_at,
         d.id as department_id,
@@ -335,7 +339,23 @@ export async function getProjectAlbums(req: Request, res: Response) {
         cust.telegram_username as customer_telegram,
         ast.id as status_id,
         ast.code as status_code,
-        ast.name as status_name
+        ast.name as status_name,
+        ast.color_hex as status_color,
+        (
+          SELECT ae.created_at 
+          FROM album_events ae 
+          WHERE ae.album_id = a.id 
+          ORDER BY ae.created_at DESC 
+          LIMIT 1
+        ) as last_event_date,
+        (
+          SELECT ast2.name 
+          FROM album_events ae2
+          LEFT JOIN album_statuses ast2 ON ae2.status_id = ast2.id
+          WHERE ae2.album_id = a.id 
+          ORDER BY ae2.created_at DESC 
+          LIMIT 1
+        ) as last_event_status
       FROM albums a
       LEFT JOIN departments d ON a.department_id = d.id
       LEFT JOIN participants exec ON a.executor_id = exec.id
@@ -346,15 +366,10 @@ export async function getProjectAlbums(req: Request, res: Response) {
 
     const params: any[] = [projectId];
 
-    // Фильтр по категории (через код альбома)
+    // Фильтр по категории
     if (category) {
-      if (category === 'СВОК ПД') {
-        // ПД альбомы обычно имеют коды: ПЗ, ПЗУ, АР, КР и т.д.
-        query += ` AND a.code REGEXP '^(ПЗ|ПЗУ|АР|КР|ИОС|ОВ|ВК|СС|ТХ|ПОС|ООС|ПБ|ОДИ)'`;
-      } else if (category === 'СВОК РД') {
-        // РД альбомы имеют коды с буквами после точки
-        query += ` AND a.code REGEXP '\\.'`;
-      }
+      query += ` AND a.category = ?`;
+      params.push(category);
     }
 
     query += ` ORDER BY d.name, a.code`;
@@ -366,22 +381,33 @@ export async function getProjectAlbums(req: Request, res: Response) {
       id: row.id.toString(),
       name: row.name,
       code: row.code,
+      category: row.category || 'СВОК ПД',
       department: row.department_name || '',
       departmentCode: row.department_code || '',
-      executor: row.executor_first_name && row.executor_last_name 
-        ? `${row.executor_first_name} ${row.executor_last_name}`.trim()
-        : '',
-      executorId: row.executor_id?.toString() || '',
-      customer: row.customer_first_name && row.customer_last_name
-        ? `${row.customer_first_name} ${row.customer_last_name}`.trim()
-        : '',
-      customerId: row.customer_id?.toString() || '',
+      executor: {
+        name: row.executor_first_name && row.executor_last_name 
+          ? `${row.executor_first_name} ${row.executor_last_name}`.trim()
+          : '',
+        id: row.executor_id?.toString() || '',
+        telegram: row.executor_telegram || ''
+      },
+      customer: {
+        name: row.customer_first_name && row.customer_last_name
+          ? `${row.customer_first_name} ${row.customer_last_name}`.trim()
+          : '',
+        id: row.customer_id?.toString() || '',
+        telegram: row.customer_telegram || ''
+      },
       deadline: row.deadline,
       status: row.status_name || '',
       statusCode: row.status_code || '',
+      statusColor: row.status_color || '',
+      lastEvent: {
+        status: row.last_event_status || row.status_name || '',
+        date: row.last_event_date || row.last_status_at || row.created_at
+      },
       albumLink: row.link || '',
       comment: row.comment || '',
-      category: category || 'СВОК ПД', // Временно возвращаем переданную категорию
       projectId: projectId
     }));
 
@@ -407,7 +433,7 @@ export async function getProjectAlbums(req: Request, res: Response) {
  * GET /api/companies/:companyId/album-templates
  * Получить список шаблонов альбомов компании
  */
-export async function getAlbumTemplates(req: Request, res: Response) {
+export async function getAlbumTemplates(req: Request, res: Response): Promise<void> {
   try {
     const { companyId } = req.params;
     const userId = req.user?.id;
@@ -425,10 +451,11 @@ export async function getAlbumTemplates(req: Request, res: Response) {
 
     if (!access || access.length === 0) {
       console.log(`❌ Access denied: user ${userId} not found in company ${companyId}`);
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'Access denied to this company'
       });
+      return;
     }
 
     // Получаем шаблоны альбомов с элементами
@@ -507,7 +534,7 @@ export async function getAlbumTemplates(req: Request, res: Response) {
  * POST /api/companies/:companyId/projects/:projectId/albums
  * Создать новый альбом в проекте
  */
-export async function createAlbum(req: Request, res: Response) {
+export async function createAlbum(req: Request, res: Response): Promise<void> {
   const connection = await pool.getConnection();
   
   try {
@@ -515,6 +542,7 @@ export async function createAlbum(req: Request, res: Response) {
     const { 
       name, 
       code, 
+      category,
       departmentId, 
       executorId, 
       customerId, 
@@ -529,7 +557,8 @@ export async function createAlbum(req: Request, res: Response) {
       companyId, 
       projectId, 
       name, 
-      code, 
+      code,
+      category, 
       departmentId, 
       executorId, 
       customerId,
@@ -538,19 +567,36 @@ export async function createAlbum(req: Request, res: Response) {
 
     // Валидация обязательных полей
     if (!name || !code || !departmentId) {
-      return res.status(400).json({ 
+      res.status(400).json({ 
         error: 'Missing required fields: name, code, departmentId' 
       });
+      return;
     }
 
     // Проверяем, что проект принадлежит компании
-    const [projectRows] = await connection.query<RowDataPacket[]>(
+    const [projects] = await connection.query<RowDataPacket[]>(
       'SELECT id FROM projects WHERE id = ? AND company_id = ?',
       [projectId, companyId]
     );
 
-    if (projectRows.length === 0) {
-      return res.status(404).json({ error: 'Project not found' });
+    if (projects.length === 0) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    // Проверяем, нет ли уже альбома с таким кодом в этом проекте (в любой категории)
+    const [existingAlbums] = await connection.query<RowDataPacket[]>(
+      'SELECT id, category FROM albums WHERE project_id = ? AND code = ?',
+      [projectId, code]
+    );
+
+    if (existingAlbums.length > 0) {
+      const existingCategory = existingAlbums[0].category;
+      res.status(400).json({ 
+        error: `Альбом с кодом "${code}" уже существует в этом проекте (${existingCategory})`,
+        code: 'DUPLICATE_ALBUM_CODE'
+      });
+      return;
     }
 
     await connection.beginTransaction();
@@ -565,13 +611,14 @@ export async function createAlbum(req: Request, res: Response) {
     // Создаем альбом
     const [result] = await connection.query<any>(
       `INSERT INTO albums 
-        (project_id, name, code, department_id, executor_id, customer_id, 
+        (project_id, name, code, category, department_id, executor_id, customer_id, 
          deadline, status_id, last_status_at, comment, link, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)`,
       [
         projectId, 
         name, 
-        code, 
+        code,
+        category || 'СВОК ПД', 
         departmentId, 
         executorId || null, 
         customerId || null, 
@@ -603,11 +650,82 @@ export async function createAlbum(req: Request, res: Response) {
       message: 'Album created successfully'
     });
 
-  } catch (error) {
+  } catch (error: any) {
     await connection.rollback();
     console.error('❌ Error creating album:', error);
+    
+    // Обработка ошибки дубликата
+    if (error.code === 'ER_DUP_ENTRY') {
+      res.status(400).json({
+        error: 'Альбом с таким кодом уже существует в этом проекте',
+        code: 'DUPLICATE_ALBUM_CODE'
+      });
+      return;
+    }
+    
     res.status(500).json({
       error: 'Failed to create album',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    connection.release();
+  }
+}
+
+export async function deleteAlbum(req: Request, res: Response): Promise<void> {
+  const { albumId, projectId, companyId } = req.params;
+  const connection = await pool.getConnection();
+  
+  console.log('🗑️ Delete album request:', { albumId, projectId, companyId });
+  
+  try {
+    await connection.beginTransaction();
+    
+    // Сначала проверим, существует ли альбом вообще
+    const [albumCheck] = await connection.query<RowDataPacket[]>(
+      'SELECT id, project_id FROM albums WHERE id = ?',
+      [albumId]
+    );
+    console.log('🔍 Album check:', albumCheck);
+    
+    // Проверим проект
+    const [projectCheck] = await connection.query<RowDataPacket[]>(
+      'SELECT id, company_id FROM projects WHERE id = ?',
+      [projectId]
+    );
+    console.log('🔍 Project check:', projectCheck);
+    
+    // Проверяем, что альбом принадлежит проекту и компании
+    const [albums] = await connection.query<RowDataPacket[]>(
+      `SELECT a.id 
+       FROM albums a
+       JOIN projects p ON a.project_id = p.id
+       WHERE a.id = ? AND a.project_id = ? AND p.company_id = ?`,
+      [albumId, projectId, companyId]
+    );
+    
+    console.log('🔍 Albums found:', albums);
+    
+    if (albums.length === 0) {
+      await connection.rollback();
+      console.log('❌ Album not found with params:', { albumId, projectId, companyId });
+      res.status(404).json({ error: 'Album not found' });
+      return;
+    }
+    
+    // Удаляем события альбома
+    await connection.query('DELETE FROM album_events WHERE album_id = ?', [albumId]);
+    
+    // Удаляем альбом
+    await connection.query('DELETE FROM albums WHERE id = ?', [albumId]);
+    
+    await connection.commit();
+    res.json({ message: 'Album deleted successfully' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error deleting album:', error);
+    res.status(500).json({
+      error: 'Failed to delete album',
       details: error instanceof Error ? error.message : String(error)
     });
   } finally {

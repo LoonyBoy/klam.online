@@ -74,6 +74,7 @@ export function AlbumsView({
       const apiData = {
         name: albumData.name,
         code: albumData.code,
+        category: category, // Используем категорию из пропсов
         departmentId: parseInt(albumData.department),
         executorId: albumData.executor ? parseInt(albumData.executor) : undefined,
         customerId: albumData.customer ? parseInt(albumData.customer) : undefined,
@@ -122,6 +123,7 @@ export function AlbumsView({
           onAlbumClick={onAlbumClick}
           onAddAlbum={handleAddAlbum}
           onQuickAdd={handleQuickAdd}
+          onRetry={loadAlbums}
           isExpanded={true}
           isLoading={isLoading}
           companyId={localStorage.getItem('companyId') || ''}

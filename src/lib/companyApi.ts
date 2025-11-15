@@ -234,6 +234,7 @@ export const companyApi = {
   async createAlbum(companyId: string, projectId: string, albumData: {
     name: string;
     code: string;
+    category?: 'СВОК ПД' | 'СВОК РД';
     departmentId: number;
     executorId?: number;
     customerId?: number;
@@ -502,6 +503,24 @@ export const companyApi = {
       const error = await response.json().catch(() => ({ error: 'Unknown error' }));
       console.error('❌ Server error:', error);
       throw new Error(error.details || error.error || 'Failed to delete project');
+    }
+    
+    return response.json();
+  },
+
+  // Удалить альбом
+  async deleteAlbum(companyId: string, projectId: string, albumId: string) {
+    console.log('🗑️ Deleting album:', albumId);
+    
+    const response = await fetch(`http://localhost:3001/api/companies/${companyId}/projects/${projectId}/albums/${albumId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ Server error:', error);
+      throw new Error(error.details || error.error || 'Failed to delete album');
     }
     
     return response.json();

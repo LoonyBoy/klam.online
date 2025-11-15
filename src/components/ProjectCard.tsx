@@ -19,7 +19,7 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
-import { mockAlbums, mockEvents } from '../lib/mockData';
+import { mockEvents } from '../lib/mockData';
 import { User as UserType } from '../App';
 import { toast } from 'sonner';
 import { companyApi } from '../lib/companyApi';
@@ -36,8 +36,8 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   const [project, setProject] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Временно используем моковые данные для альбомов и событий
-  const projectAlbums = mockAlbums.filter(a => a.projectId === projectId);
+  // Состояние для альбомов из API
+  const [projectAlbums, setProjectAlbums] = useState<any[]>([]);
   const projectEvents = mockEvents.filter(e => e.projectId === projectId).slice(0, 8);
   
   // Фильтрация альбомов по категории
@@ -63,7 +63,25 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   // Загрузка данных проекта при монтировании компонента
   useEffect(() => {
     loadProjectDetails();
+    loadProjectAlbums();
   }, [projectId]);
+
+  const loadProjectAlbums = async () => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) return;
+
+      // Загружаем все альбомы проекта (без фильтра по категории)
+      const response = await companyApi.getProjectAlbums(companyId, projectId);
+      
+      if (response.success && response.albums) {
+        setProjectAlbums(response.albums);
+        console.log('📊 Loaded albums:', response.albums);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load project albums:', error);
+    }
+  };
 
   const loadProjectDetails = async () => {
     try {

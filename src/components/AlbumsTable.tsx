@@ -5,6 +5,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { 
   Search, 
   Plus, 
@@ -16,7 +17,8 @@ import {
   Check,
   X,
   Edit,
-  Save
+  Save,
+  Trash2
 } from 'lucide-react';
 import { companyApi } from '../lib/companyApi';
 import { toast } from 'sonner';
@@ -53,6 +55,10 @@ export function AlbumsTable({
   const [executorFilter, setExecutorFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
+  
+  // Delete album state
+  const [albumToDelete, setAlbumToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -159,21 +165,28 @@ export function AlbumsTable({
         // Find specific item
         const item = template.items.find((i: any) => i.id === itemId);
         if (item) {
+          // Find department ID by code
+          const department = projectDepartments.find((d: any) => d.code === item.departmentCode);
+          
           setQuickAddData({
             ...quickAddData,
             name: item.name || '',
             code: item.code || '',
-            department: item.departmentCode || ''
+            department: department?.id?.toString() || item.departmentCode || ''
           });
         }
       } else if (template.items && template.items.length > 0) {
         // Use first item if no specific item ID
         const item = template.items[0];
+        
+        // Find department ID by code
+        const department = projectDepartments.find((d: any) => d.code === item.departmentCode);
+        
         setQuickAddData({
           ...quickAddData,
           name: item.name || template.name,
           code: item.code || '',
-          department: item.departmentCode || ''
+          department: department?.id?.toString() || item.departmentCode || ''
         });
       }
       setSelectedTemplate(templateValue);
@@ -186,10 +199,31 @@ export function AlbumsTable({
   }, [albums]);
 
   const executorFilters = useMemo(() => {
-    return ['all', ...new Set(albums.map(a => a.executor.name))];
+    return ['all', ...new Set(albums.map(a => a.executor?.name).filter(Boolean))];
   }, [albums]);
 
   const statuses = ['all', 'Принято', 'На проверке', 'Замечания', 'В работе'];
+
+  // Filter templates by project departments
+  const filteredTemplates = useMemo(() => {
+    if (!projectDepartments || projectDepartments.length === 0) {
+      return albumTemplates;
+    }
+
+    const projectDepartmentCodes = projectDepartments.map((d: any) => d.code);
+    
+    return albumTemplates.map(template => {
+      // Filter template items by department
+      const filteredItems = template.items?.filter((item: any) => 
+        projectDepartmentCodes.includes(item.departmentCode)
+      ) || [];
+
+      return {
+        ...template,
+        items: filteredItems
+      };
+    }).filter(template => template.items.length > 0); // Only show templates with matching items
+  }, [albumTemplates, projectDepartments]);
 
   // Filter albums
   const filteredAlbums = useMemo(() => {
@@ -199,7 +233,7 @@ export function AlbumsTable({
         album.code.toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesDepartment = departmentFilter === 'all' || album.department === departmentFilter;
-      const matchesExecutor = executorFilter === 'all' || album.executor.name === executorFilter;
+      const matchesExecutor = executorFilter === 'all' || album.executor?.name === executorFilter;
       const matchesStatus = statusFilter === 'all' || album.status === statusFilter;
 
       return matchesSearch && matchesDepartment && matchesExecutor && matchesStatus;
@@ -221,6 +255,26 @@ export function AlbumsTable({
 
     return { total, accepted, inProgress, overdue };
   }, [filteredAlbums]);
+
+  // Handle album deletion
+  const handleDeleteAlbum = async () => {
+    if (!albumToDelete || !companyId || !projectId) return;
+    
+    console.log('🗑️ Deleting album:', albumToDelete.id, 'Full album:', albumToDelete);
+    
+    setIsDeleting(true);
+    try {
+      await companyApi.deleteAlbum(Number(companyId), Number(projectId), Number(albumToDelete.id));
+      toast.success('Альбом успешно удален');
+      setAlbumToDelete(null);
+      onRetry?.(); // Refresh the albums list
+    } catch (error: any) {
+      console.error('Error deleting album:', error);
+      toast.error(error.message || 'Не удалось удалить альбом');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Get deadline color indicator
   const getDeadlineColor = (deadline: string, status: string): string => {
@@ -404,10 +458,10 @@ export function AlbumsTable({
                                 <SelectItem value="none">Без шаблона</SelectItem>
                                 {templatesLoading ? (
                                   <SelectItem value="loading" disabled>Загрузка шаблонов...</SelectItem>
-                                ) : albumTemplates.length === 0 ? (
-                                  <SelectItem value="empty" disabled>Нет доступных шаблонов</SelectItem>
+                                ) : filteredTemplates.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет доступных шаблонов для этого проекта</SelectItem>
                                 ) : (
-                                  albumTemplates.flatMap(template => 
+                                  filteredTemplates.flatMap(template => 
                                     template.items && template.items.length > 0 ? (
                                       template.items.map((item: any) => (
                                         <SelectItem key={`${template.id}-${item.id}`} value={`${template.id}-${item.id}`}>
@@ -694,10 +748,12 @@ export function AlbumsTable({
                 <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[180px]" style={{ fontSize: '13px' }}>Название альбома</th>
                 <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>Отдел</th>
                 <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[140px]" style={{ fontSize: '13px' }}>Исполнитель</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[140px]" style={{ fontSize: '13px' }}>Заказчик</th>
                 <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>Дедлайн</th>
                 <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[150px]" style={{ fontSize: '13px' }}>Последнее событие</th>
                 <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>Ссылки</th>
                 <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[180px]" style={{ fontSize: '13px' }}>Комментарий</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>Действия</th>
               </tr>
             </thead>
             <tbody>
@@ -809,14 +865,38 @@ export function AlbumsTable({
                         </Select>
                       ) : (
                         <div className="flex items-center gap-1.5">
-                          <img 
-                            src={album.executor.avatar} 
-                            alt={album.executor.name}
-                            className="w-5 h-5 rounded-full"
-                          />
-                          <span className="text-gray-900 text-xs">{album.executor.name}</span>
+                          {album.executor && album.executor.name ? (
+                            <>
+                              <img 
+                                src={album.executor.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(album.executor.name)}&background=3B82F6&color=fff&size=32`}
+                                alt={album.executor.name}
+                                className="w-5 h-5 rounded-full"
+                              />
+                              <span className="text-gray-900 text-xs">{album.executor.name}</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
                         </div>
                       )}
+                    </td>
+                    
+                    {/* Заказчик */}
+                    <td className="py-1 px-3">
+                      <div className="flex items-center gap-1.5">
+                        {album.customer && album.customer.name ? (
+                          <>
+                            <img 
+                              src={album.customer.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(album.customer.name)}&background=10B981&color=fff&size=32`}
+                              alt={album.customer.name}
+                              className="w-5 h-5 rounded-full"
+                            />
+                            <span className="text-gray-900 text-xs">{album.customer.name}</span>
+                          </>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </div>
                     </td>
                     
                     {/* Дедлайн */}
@@ -838,14 +918,9 @@ export function AlbumsTable({
                     
                     {/* Последнее событие */}
                     <td className="py-1 px-3">
-                      {album.lastEvent ? (
+                      {album.lastEvent && album.lastEvent.status ? (
                         <div className="space-y-1">
-                          <Badge 
-                            variant="outline" 
-                            className={getEventBadgeConfig(album.lastEvent.type).className}
-                          >
-                            {album.lastEvent.type}
-                          </Badge>
+                          <span className="text-gray-700 text-xs">{album.lastEvent.status}</span>
                           <p className="text-xs text-gray-500">{formatDateTime(album.lastEvent.date)}</p>
                         </div>
                       ) : (
@@ -919,6 +994,18 @@ export function AlbumsTable({
                         )
                       )}
                     </td>
+                    
+                    {/* Действия */}
+                    <td className="py-1 px-3" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setAlbumToDelete(album)}
+                        className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </td>
                   </tr>
                 );
               })}
@@ -926,7 +1013,7 @@ export function AlbumsTable({
               {/* Quick add row */}
               {isQuickAdding ? (
                 <tr className="border-t-2 border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50">
-                  <td colSpan={9} className="p-6">
+                  <td colSpan={11} className="p-6">
                     <div className="bg-white rounded-lg p-6 shadow-sm border border-blue-200">
                       <div className="flex items-center justify-between mb-4">
                         <div>
@@ -984,10 +1071,10 @@ export function AlbumsTable({
                                 <SelectItem value="none">Без шаблона</SelectItem>
                                 {templatesLoading ? (
                                   <SelectItem value="loading" disabled>Загрузка шаблонов...</SelectItem>
-                                ) : albumTemplates.length === 0 ? (
-                                  <SelectItem value="empty" disabled>Нет доступных шаблонов</SelectItem>
+                                ) : filteredTemplates.length === 0 ? (
+                                  <SelectItem value="empty" disabled>Нет доступных шаблонов для этого проекта</SelectItem>
                                 ) : (
-                                  albumTemplates.flatMap(template => 
+                                  filteredTemplates.flatMap(template => 
                                     template.items && template.items.length > 0 ? (
                                       template.items.map((item: any) => (
                                         <SelectItem key={`${template.id}-${item.id}`} value={`${template.id}-${item.id}`}>
@@ -1155,7 +1242,7 @@ export function AlbumsTable({
                 </tr>
               ) : (
                 <tr className="border-t border-gray-200 hover:bg-gray-50 transition-colors">
-                  <td colSpan={9} className="py-3 px-4">
+                  <td colSpan={11} className="py-3 px-4">
                     <button
                       onClick={() => setIsQuickAdding(true)}
                       className="w-full flex items-center justify-center gap-2 text-gray-500 hover:text-[#3B82F6] transition-colors py-2 rounded-lg hover:bg-blue-50"
@@ -1170,6 +1257,35 @@ export function AlbumsTable({
           </table>
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!albumToDelete} onOpenChange={() => setAlbumToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить альбом?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вы уверены, что хотите удалить альбом <strong>{albumToDelete?.code} - {albumToDelete?.name}</strong>?
+              Это действие необратимо и удалит все связанные события.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              disabled={isDeleting}
+              className="bg-white text-gray-900 border border-gray-300 hover:bg-gray-100"
+            >
+              Отмена
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAlbum}
+              disabled={isDeleting}
+              className="!bg-red-600 !text-white hover:!bg-red-700 border-0"
+              style={{ backgroundColor: '#dc2626', color: '#ffffff' }}
+            >
+              {isDeleting ? 'Удаление...' : 'Удалить'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

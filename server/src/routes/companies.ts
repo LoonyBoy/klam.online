@@ -30,6 +30,9 @@ router.get('/:companyId/projects/:projectId/albums', authenticateToken, albumCon
 // Создать альбом в проекте (требует аутентификацию)
 router.post('/:companyId/projects/:projectId/albums', authenticateToken, albumController.createAlbum);
 
+// Удалить альбом из проекта (требует аутентификацию)
+router.delete('/:companyId/projects/:projectId/albums/:albumId', authenticateToken, albumController.deleteAlbum);
+
 // Создать новый проект (требует аутентификацию)
 router.post('/:companyId/projects', authenticateToken, projectController.createProject);
 
