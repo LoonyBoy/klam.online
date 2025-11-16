@@ -376,6 +376,13 @@ export async function getProjectAlbums(req: Request, res: Response): Promise<voi
 
     const [albums] = await pool.query<RowDataPacket[]>(query, params);
 
+    console.log('🔍 Raw albums from DB:', albums.map(a => ({
+      id: a.id,
+      code: a.code,
+      executor: { id: a.executor_id, first: a.executor_first_name, last: a.executor_last_name },
+      customer: { id: a.customer_id, first: a.customer_first_name, last: a.customer_last_name }
+    })));
+
     // Форматируем результат
     const formattedAlbums = albums.map(row => ({
       id: row.id.toString(),
