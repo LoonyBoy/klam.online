@@ -3,6 +3,54 @@ import { pool } from '../db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 /**
+ * GET /api/companies/:companyId/check
+ * Проверить доступ пользователя к компании
+ */
+export async function checkUserAccess(req: Request, res: Response) {
+  try {
+    const { companyId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized'
+      });
+    }
+
+    // Проверяем, есть ли пользователь в таблице company_users
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT cu.id, cu.role_in_company, c.name as company_name
+       FROM company_users cu
+       INNER JOIN companies c ON cu.company_id = c.id
+       WHERE cu.company_id = ? AND cu.user_id = ?`,
+      [companyId, userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User is not a member of this company'
+      });
+    }
+
+    res.json({
+      success: true,
+      hasAccess: true,
+      companyName: rows[0].company_name,
+      role: rows[0].role_in_company
+    });
+
+  } catch (error) {
+    console.error('❌ Error in checkUserAccess:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check user access'
+    });
+  }
+}
+
+/**
  * GET /api/companies/invitations
  * Получить приглашения пользователя
  */

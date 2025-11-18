@@ -18,6 +18,9 @@ router.post('/invitations/:id/accept', authenticateToken, companyController.acce
 // Отклонить приглашение
 router.post('/invitations/:id/decline', companyController.declineInvitation);
 
+// Проверить доступ пользователя к компании (требует аутентификацию)
+router.get('/:companyId/check', authenticateToken, companyController.checkUserAccess);
+
 // Получить проекты компании (требует аутентификацию)
 router.get('/:companyId/projects', authenticateToken, projectController.getCompanyProjects);
 

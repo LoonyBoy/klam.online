@@ -14,6 +14,7 @@ import authRoutes from './routes/auth';
 import companyRoutes from './routes/companies';
 import dictionaryRoutes from './routes/dictionaries';
 import telegramRoutes from './routes/telegram';
+import userRoutes from './routes/user';
 import { initBot, stopBot } from './bot';
 
 // Load environment variables
@@ -92,6 +93,7 @@ app.get('/api', (req: Request, res: Response) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/dictionaries', dictionaryRoutes);
 app.use('/api/telegram', telegramRoutes);

@@ -85,6 +85,100 @@ export default function App() {
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<'СВОК ПД' | 'СВОК РД'>('СВОК ПД');
   const [isTelegramAuthProcessing, setIsTelegramAuthProcessing] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Проверяем сохраненную авторизацию при загрузке
+  useEffect(() => {
+    const checkSavedAuth = async () => {
+      console.log('🔍 Проверка сохраненной авторизации...');
+      const authToken = localStorage.getItem('authToken');
+      const storedUser = localStorage.getItem('user');
+      const companyId = localStorage.getItem('companyId');
+      
+      console.log('📦 Данные из localStorage:', {
+        hasToken: !!authToken,
+        hasUser: !!storedUser,
+        companyId: companyId
+      });
+
+      if (authToken && storedUser) {
+        try {
+          // Проверяем валидность токена
+          console.log('🔐 Проверка токена...');
+          const response = await fetch('/api/auth/verify', {
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'ngrok-skip-browser-warning': 'true'
+            }
+          });
+
+          if (response.ok) {
+            console.log('✅ Токен действителен, автоматический вход');
+            const userData = JSON.parse(storedUser);
+            
+            setCurrentUser({
+              name: userData?.firstName || 'Пользователь',
+              telegramUsername: userData?.username ? `@${userData.username}` : undefined,
+              email: userData?.email
+            });
+
+            setIsAuthenticated(true);
+            
+            // Проверяем наличие компании
+            if (companyId) {
+              console.log(`🏢 Проверка компании ${companyId}...`);
+              try {
+                // Проверяем, действительно ли пользователь состоит в этой компании
+                const companyCheckResponse = await fetch(`/api/companies/${companyId}/check`, {
+                  headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'ngrok-skip-browser-warning': 'true'
+                  }
+                });
+
+                console.log('📡 Ответ сервера:', companyCheckResponse.status);
+
+                if (companyCheckResponse.ok) {
+                  console.log('✅ Компания найдена, переход в dashboard');
+                  localStorage.setItem('hasCompletedOnboarding', 'true');
+                  setCurrentPage('dashboard');
+                } else {
+                  const errorData = await companyCheckResponse.json();
+                  console.log('⚠️ Компания не найдена:', errorData);
+                  localStorage.removeItem('companyId');
+                  localStorage.removeItem('hasCompletedOnboarding');
+                  setNeedsOnboarding(true);
+                  setCurrentPage('onboarding');
+                }
+              } catch (error) {
+                console.error('❌ Ошибка проверки компании:', error);
+                // В случае ошибки показываем онбординг
+                setNeedsOnboarding(true);
+                setCurrentPage('onboarding');
+              }
+            } else {
+              // Нет сохраненной компании - показываем онбординг
+              console.log('📋 Компания не найдена в localStorage, показываем онбординг');
+              setNeedsOnboarding(true);
+              setCurrentPage('onboarding');
+            }
+          } else {
+            console.log('⚠️ Токен недействителен, требуется повторный вход');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            localStorage.removeItem('companyId');
+            localStorage.removeItem('hasCompletedOnboarding');
+          }
+        } catch (error) {
+          console.error('❌ Ошибка проверки токена:', error);
+        }
+      }
+      
+      setIsCheckingAuth(false);
+    };
+
+    checkSavedAuth();
+  }, []);
 
   // Проверяем параметры URL для Telegram callback
   useEffect(() => {
@@ -115,7 +209,10 @@ export default function App() {
       
       const response = await fetch('/api/auth/telegram', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify(userData)
       });
 
@@ -158,10 +255,19 @@ export default function App() {
     setCurrentPage('login');
   };
 
-  const handleLogin = () => {
-    // Получаем данные пользователя из localStorage
+  const handleLogin = async () => {
+    console.log('🚀 === ВЫЗВАНА ФУНКЦИЯ handleLogin ===');
     const storedUser = localStorage.getItem('user');
     const userData = storedUser ? JSON.parse(storedUser) : null;
+    const authToken = localStorage.getItem('authToken');
+    let companyId = localStorage.getItem('companyId');
+    
+    console.log('📦 Данные для входа:', {
+      hasUser: !!storedUser,
+      hasToken: !!authToken,
+      savedCompanyId: companyId,
+      userId: userData?.id
+    });
     
     // Устанавливаем данные пользователя
     setCurrentUser({
@@ -170,36 +276,108 @@ export default function App() {
       email: userData?.email
     });
     
-    // Проверяем, прошел ли пользователь онбординг
-    const hasCompletedOnboarding = localStorage.getItem('hasCompletedOnboarding') === 'true';
+    setIsAuthenticated(true);
     
-    if (hasCompletedOnboarding) {
-      // Пользователь уже проходил онбординг - сразу в dashboard
-      console.log('✅ Онбординг пройден ранее, переход в dashboard');
-      setIsAuthenticated(true);
-      setNeedsOnboarding(false);
-      setCurrentPage('dashboard');
+    // Если нет сохраненной компании, пытаемся получить список компаний пользователя
+    if (!companyId && authToken) {
+      try {
+        console.log('🔍 Поиск компаний пользователя...');
+        console.log('🔑 Используемый токен:', authToken.substring(0, 20) + '...');
+        console.log('📡 Отправка запроса на /api/user/companies');
+        
+        const companiesResponse = await fetch('/api/user/companies', {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'ngrok-skip-browser-warning': 'true'
+          }
+        });
+
+        console.log('📬 Статус ответа:', companiesResponse.status, companiesResponse.statusText);
+        
+        if (companiesResponse.ok) {
+          const companies = await companiesResponse.json();
+          console.log('📊 Найдено компаний:', companies.length);
+          console.log('📋 Данные компаний:', JSON.stringify(companies, null, 2));
+          
+          if (companies.length > 0) {
+            // Берем первую компанию
+            const foundCompanyId = companies[0].id.toString();
+            companyId = foundCompanyId;
+            localStorage.setItem('companyId', foundCompanyId);
+            console.log('💾 Сохранена компания:', foundCompanyId);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Ошибка получения компаний:', error);
+      }
+    }
+    
+    // Проверяем наличие компании
+    console.log('🏢 Проверка наличия компании, companyId:', companyId, 'hasToken:', !!authToken);
+    if (companyId && authToken) {
+      try {
+        console.log('📡 Отправка запроса на /api/companies/' + companyId + '/check');
+        // Проверяем, действительно ли пользователь состоит в компании
+        const response = await fetch(`/api/companies/${companyId}/check`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'ngrok-skip-browser-warning': 'true'
+          }
+        });
+
+        console.log('📬 Статус проверки компании:', response.status);
+        if (response.ok) {
+          console.log('✅ Компания найдена, переход в dashboard');
+          localStorage.setItem('hasCompletedOnboarding', 'true');
+          setNeedsOnboarding(false);
+          setCurrentPage('dashboard');
+        } else {
+          console.log('⚠️ Компания не найдена, показываем онбординг');
+          localStorage.removeItem('companyId');
+          localStorage.removeItem('hasCompletedOnboarding');
+          setNeedsOnboarding(true);
+          setCurrentPage('onboarding');
+        }
+      } catch (error) {
+        console.error('❌ Ошибка проверки компании:', error);
+        // В случае ошибки показываем онбординг
+        setNeedsOnboarding(true);
+        setCurrentPage('onboarding');
+      }
     } else {
-      // Новый пользователь - показываем онбординг
-      console.log('📋 Первый вход, показываем онбординг');
+      // Нет сохраненной компании - показываем онбординг
+      console.log('📋 Компания не найдена, показываем онбординг');
       setNeedsOnboarding(true);
       setCurrentPage('onboarding');
     }
   };
 
   const handleOnboardingComplete = (companyId: string) => {
-    console.log('Компания создана/выбрана:', companyId);
+    console.log('🎯 Компания создана/выбрана:', companyId);
+    console.log('💾 Сохранение в localStorage...');
     
     // Сохраняем флаг завершения онбординга
     localStorage.setItem('hasCompletedOnboarding', 'true');
     localStorage.setItem('companyId', companyId);
     
+    console.log('✅ Сохранено в localStorage:', {
+      hasCompletedOnboarding: localStorage.getItem('hasCompletedOnboarding'),
+      companyId: localStorage.getItem('companyId')
+    });
+    
     setIsAuthenticated(true);
     setNeedsOnboarding(false);
     setCurrentPage('dashboard');
+    console.log('🚀 Переход в dashboard');
   };
 
   const handleLogout = () => {
+    // Очищаем все данные авторизации
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+    localStorage.removeItem('hasCompletedOnboarding');
+    localStorage.removeItem('companyId');
+    
     setIsAuthenticated(false);
     setNeedsOnboarding(false);
     setCurrentUser(null);
@@ -221,6 +399,18 @@ export default function App() {
     setSelectedProjectName(projectName);
     setCurrentPage('albums-view');
   };
+
+  // Показываем загрузку при проверке авторизации
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Проверка авторизации...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Показываем лендинг, если пользователь не аутентифицирован и не на странице логина
   if (!isAuthenticated && currentPage === 'landing') {

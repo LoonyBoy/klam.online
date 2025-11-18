@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { telegramAuth } from '../controllers/authController';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
@@ -34,5 +35,26 @@ const router = Router();
  * }
  */
 router.post('/telegram', telegramAuth);
+
+/**
+ * GET /api/auth/verify
+ * Проверка валидности JWT токена
+ * 
+ * Headers:
+ * Authorization: Bearer <token>
+ * 
+ * Response:
+ * {
+ *   valid: true,
+ *   user: { id, telegramId, ... }
+ * }
+ */
+router.get('/verify', authenticateToken, (req, res) => {
+  // Если middleware authenticateToken не выбросил ошибку, токен валиден
+  res.json({
+    valid: true,
+    user: (req as any).user
+  });
+});
 
 export default router;

@@ -38,6 +38,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify(user)
       });
@@ -375,7 +376,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       <TelegramLoginButton
                         botName="klamonline_bot"
                         buttonSize="large"
-                        cornerRadius={10}
+                        cornerRadius={12}
                         requestAccess={false}
                         usePic={false}
                         dataOnauth={handleTelegramAuth}
@@ -385,7 +386,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   ) : (
                     <Button
                       disabled
-                      className="w-full h-14 bg-[#0088cc] text-white gap-3 text-lg shadow-lg"
+                      className="w-full h-14 bg-[#0088cc] hover:bg-[#006ba3] text-white gap-3 text-lg shadow-lg rounded-xl"
                     >
                       <MessageSquare className="w-6 h-6 animate-pulse" />
                       Авторизация...
@@ -406,14 +407,30 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
                 <style>{`
                   .telegram-login-wrapper {
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
+                    display: flex !important;
+                    justify-content: center !important;
+                    align-items: center !important;
+                    width: 100%;
+                    min-height: 56px;
+                  }
+                  .telegram-login-wrapper > div {
+                    display: flex !important;
+                    justify-content: center !important;
+                    align-items: center !important;
+                    width: 100%;
                   }
                   .telegram-login-wrapper iframe {
                     border: none !important;
-                    width: 100% !important;
-                    height: 56px !important;
+                    border-radius: 12px !important;
+                    overflow: hidden !important;
+                    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1) !important;
+                    transition: all 0.3s ease !important;
+                    margin: 0 auto !important;
+                    display: block !important;
+                  }
+                  .telegram-login-wrapper iframe:hover {
+                    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
+                    transform: translateY(-2px) !important;
                   }
                 `}</style>                <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
                   <div className="flex items-start gap-3">

@@ -67,14 +67,18 @@ export function Onboarding({ userName, userTelegramUsername, userEmail, onComple
     setIsLoading(true);
     
     try {
+      console.log('✉️ Принятие приглашения:', invitationId);
       const result = await companyApi.acceptInvitation(invitationId);
       
+      console.log('✅ Приглашение принято, результат:', result);
+      
       if (result.success) {
+        console.log('📞 Вызов onComplete с companyId:', result.companyId);
         // Редирект на дашборд компании
         onComplete(result.companyId);
       }
     } catch (error) {
-      console.error('Ошибка принятия приглашения:', error);
+      console.error('❌ Ошибка принятия приглашения:', error);
       setError('Не удалось принять приглашение');
     } finally {
       setIsLoading(false);
@@ -109,14 +113,18 @@ export function Onboarding({ userName, userTelegramUsername, userEmail, onComple
     setError('');
     
     try {
+      console.log('🏢 Создание компании:', companyName);
       const result = await companyApi.createCompany({
         name: companyName
       });
       
+      console.log('✅ Компания создана, результат:', result);
+      console.log('📞 Вызов onComplete с companyId:', result.companyId);
+      
       // Редирект на дашборд новой компании
       onComplete(result.companyId);
     } catch (error) {
-      console.error('Ошибка создания компании:', error);
+      console.error('❌ Ошибка создания компании:', error);
       setError('Не удалось создать компанию');
       setIsLoading(false);
     }
