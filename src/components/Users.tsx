@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Plus, Edit, Users as UsersIcon, UserCheck, UserCog, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Edit, Users as UsersIcon, UserCheck, UserCog, Edit2, Trash2, Link2, Copy, Check } from 'lucide-react';
 import { getCompanyUsers, getCompanyUsersStats, addParticipant, getDepartments, updateParticipant, companyApi } from '../lib/companyApi';
 
 interface User {
@@ -45,6 +45,13 @@ export function Users() {
   const [userTelegram, setUserTelegram] = useState('');
   const [userRole, setUserRole] = useState('');
   const [userDepartment, setUserDepartment] = useState('');
+  
+  // Для приглашений
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('admin');
+  const [generatedLink, setGeneratedLink] = useState('');
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -222,6 +229,41 @@ export function Users() {
     return roleType === 'executor' ? 'Исполнитель' : 'Заказчик';
   };
 
+  const handleGenerateInviteLink = async () => {
+    setIsGeneratingLink(true);
+    setGeneratedLink('');
+
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        alert('Компания не найдена');
+        return;
+      }
+
+      const result = await companyApi.generateInviteLink({
+        companyId,
+        role: inviteRole
+      });
+
+      setGeneratedLink(result.inviteLink);
+    } catch (error) {
+      console.error('❌ Failed to generate invite link:', error);
+      alert('Не удалось создать ссылку-приглашение');
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (error) {
+      console.error('❌ Failed to copy link:', error);
+    }
+  };
+
   const getInitials = (firstName: string, lastName: string | null) => {
     return (firstName.charAt(0) + (lastName?.charAt(0) || '')).toUpperCase();
   };
@@ -248,13 +290,87 @@ export function Users() {
             <p className="text-gray-500 mt-1 text-sm md:text-base">Управление участниками системы</p>
           </div>
           
-          <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                <Plus className="w-4 h-4" />
-                Добавить пользователя
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 !bg-gradient-to-r !from-green-600 !to-emerald-600 hover:!from-green-700 hover:!to-emerald-700 !text-white">
+                  <Link2 className="w-4 h-4" />
+                  Пригласить администратора
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Пригласить администратора</DialogTitle>
+                  <DialogDescription>
+                    Создайте ссылку-приглашение для нового администратора компании
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-blue-700">
+                      <UserCog className="w-5 h-5" />
+                      <div>
+                        <p className="font-medium text-sm">Роль: Администратор</p>
+                        <p className="text-xs text-blue-600">Может управлять проектами и приглашать пользователей</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button 
+                    type="button" 
+                    className="w-full" 
+                    onClick={handleGenerateInviteLink}
+                    disabled={isGeneratingLink}
+                  >
+                    <Link2 className="w-4 h-4 mr-2" />
+                    {isGeneratingLink ? 'Создание...' : 'Создать ссылку-приглашение'}
+                  </Button>
+
+                  {generatedLink && (
+                    <div className="space-y-2">
+                      <Label>Пригласительная ссылка</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={generatedLink}
+                          readOnly
+                          className="font-mono text-sm"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleCopyLink}
+                          className="shrink-0"
+                        >
+                          {linkCopied ? (
+                            <>
+                              <Check className="w-4 h-4 mr-2" />
+                              Скопировано
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4 mr-2" />
+                              Копировать
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Отправьте эту ссылку людям, которых хотите пригласить. 
+                        Они смогут войти через Telegram и автоматически присоединятся к компании.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                  <Plus className="w-4 h-4" />
+                  Добавить пользователя
+                </Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Добавить пользователя</DialogTitle>
@@ -336,6 +452,7 @@ export function Users() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
       </div>
 

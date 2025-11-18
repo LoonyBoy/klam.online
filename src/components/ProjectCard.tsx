@@ -44,6 +44,9 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   const pdAlbums = projectAlbums.filter(a => a.category === 'СВОК ПД');
   const rdAlbums = projectAlbums.filter(a => a.category === 'СВОК РД');
   
+  // Состояние для статуса проекта
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  
   // Состояния для управления пользователями
   const [executors, setExecutors] = useState<UserType[]>([]);
   const [clients, setClients] = useState<UserType[]>([]);
@@ -112,6 +115,38 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       toast.error('Ошибка при загрузке проекта');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleUpdateStatus = async (newStatus: 'active' | 'pause' | 'archive') => {
+    if (isUpdatingStatus) return;
+    
+    try {
+      setIsUpdatingStatus(true);
+      const companyId = localStorage.getItem('companyId');
+      
+      if (!companyId) {
+        toast.error('Не удалось определить компанию');
+        return;
+      }
+
+      await companyApi.updateProjectStatus(companyId, projectId, newStatus);
+      
+      // Обновляем локальный статус
+      setProject((prev: any) => ({ ...prev, status: newStatus }));
+      
+      const statusLabels = {
+        active: 'В работе',
+        pause: 'На паузе',
+        archive: 'В архиве'
+      };
+      
+      toast.success(`Статус проекта изменён на "${statusLabels[newStatus]}"`);
+    } catch (error) {
+      console.error('❌ Failed to update project status:', error);
+      toast.error('Не удалось обновить статус проекта');
+    } finally {
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -291,67 +326,118 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         <span className="sm:hidden">Назад</span>
       </Button>
 
-      {/* Заголовок проекта - улучшенный дизайн */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 md:p-6 mb-4 md:mb-6 border border-blue-100">
-        <div className="flex items-start justify-between mb-4">
+      {/* Заголовок проекта - современный минималистичный дизайн */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6 shadow-sm hover:shadow-md transition-shadow">
+        {/* Заголовок и статус */}
+        <div className="flex items-start justify-between mb-6">
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <Badge variant="default" className="text-xs">
-                Активный
-              </Badge>
-              <span className="text-sm text-gray-600 font-mono">{project.code}</span>
+            <div className="flex items-center gap-3 mb-3">
+              <h1 className="text-2xl font-semibold text-gray-900">{project.name}</h1>
+              <span className="text-sm text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">{project.code}</span>
             </div>
-            <h1 className="text-gray-900 mb-2">{project.name}</h1>
+            
+            {/* Переключатель статуса */}
+            <div className="flex items-center gap-3">
+              {/* Рубильник В работе/Пауза c анимированной подложкой */}
+              <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1">
+                {/* Анимированная подложка */}
+                {(project.status === 'active' || project.status === 'pause') && (
+                  <div
+                    className={`absolute top-1 h-[calc(100%-8px)] w-[calc(50%-4px)] rounded-full transition-all duration-300 ease-in-out ${
+                      project.status === 'active' ? 'left-1 bg-green-600' : 'left-[calc(50%+3px)] bg-red-600'
+                    }`}
+                  />
+                )}
+
+                {/* Кнопки */}
+                <button
+                  onClick={() => handleUpdateStatus('active')}
+                  disabled={isUpdatingStatus || project.status === 'active'}
+                  className={`relative z-10 px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 ${
+                    project.status === 'active'
+                      ? 'text-white'
+                      : 'text-gray-700 hover:text-gray-900'
+                  } disabled:cursor-not-allowed`}
+                >
+                  В работе
+                </button>
+                <button
+                  onClick={() => handleUpdateStatus('pause')}
+                  disabled={isUpdatingStatus || project.status === 'pause'}
+                  className={`relative z-10 px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 ${
+                    project.status === 'pause'
+                      ? 'text-white'
+                      : 'text-gray-700 hover:text-gray-900'
+                  } disabled:cursor-not-allowed`}
+                >
+                  Пауза
+                </button>
+              </div>
+              
+              {/* Кнопка архивации */}
+              <button
+                onClick={() => handleUpdateStatus('archive')}
+                disabled={isUpdatingStatus || project.status === 'archive'}
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${
+                  project.status === 'archive'
+                    ? 'bg-black text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                В архиве
+              </button>
+            </div>
           </div>
         </div>
         
-        {/* Основная информация в сетке */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="bg-white rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center gap-2 text-gray-500 mb-1">
-              <User className="w-4 h-4" />
-              <span className="text-xs">Заказчик</span>
+        {/* Основная информация - плоский дизайн */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Заказчик</div>
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-gray-400" />
+              <p className="text-base text-gray-900">{project.customerCompanyName || 'Не указан'}</p>
             </div>
-            <p className="text-sm font-medium text-gray-900">{project.customerCompanyName || 'Не указан'}</p>
           </div>
           
-          <div className="bg-white rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center gap-2 text-gray-500 mb-1">
-              <Calendar className="w-4 h-4" />
-              <span className="text-xs">Создан</span>
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Дата создания</div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-gray-400" />
+              <p className="text-base text-gray-900">{formatDate(project.createdAt)}</p>
             </div>
-            <p className="text-sm font-medium text-gray-900">{formatDate(project.createdAt)}</p>
           </div>
         </div>
 
-        {/* Отделы */}
+        {/* Отделы - минималистичный стиль */}
         {project.departments && project.departments.length > 0 && (
-          <div className="bg-white rounded-lg p-3 border border-gray-200 mb-4">
-            <div className="flex items-center gap-2 text-gray-500 mb-2">
-              <Building2 className="w-4 h-4" />
-              <span className="text-xs">Задействованные отделы</span>
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Building2 className="w-4 h-4 text-gray-400" />
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Задействованные отделы</div>
             </div>
             <div className="flex flex-wrap gap-2">
               {project.departments.map((dept: any, index: number) => (
-                <Badge key={index} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                <span key={index} className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-full">
                   {dept.name}
-                </Badge>
+                </span>
               ))}
             </div>
           </div>
         )}
         
-        {/* Ссылки */}
-        {project.telegramChannel && (
-          <div className="flex gap-2">
-            {project.telegramChannel.inviteLink && (
-              <Button variant="outline" size="sm" className="gap-2 bg-white hover:bg-blue-50 border-gray-300" asChild>
-                <a href={project.telegramChannel.inviteLink} target="_blank" rel="noopener noreferrer">
-                  <MessageSquare className="w-4 h-4" />
-                  Telegram канал
-                </a>
-              </Button>
-            )}
+        {/* Telegram канал */}
+        {project.telegramChannel && project.telegramChannel.inviteLink && (
+          <div className="pt-4 border-t border-gray-100">
+            <a 
+              href={project.telegramChannel.inviteLink} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Открыть Telegram канал проекта
+            </a>
           </div>
         )}
       </div>

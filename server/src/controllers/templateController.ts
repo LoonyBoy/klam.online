@@ -146,6 +146,16 @@ export async function createTemplate(req: Request, res: Response) {
   } catch (error) {
     await connection.rollback();
     console.error('❌ Ошибка при создании шаблона:', error);
+    
+    // Проверяем, является ли это ошибкой дублирования
+    if ((error as any).code === 'ER_DUP_ENTRY') {
+      res.status(409).json({
+        error: 'Шаблон с таким именем уже существует',
+        details: 'Template with this name already exists for this company',
+      });
+      return;
+    }
+    
     res.status(500).json({
       error: 'Failed to create template',
       details: error instanceof Error ? error.message : 'Unknown error',

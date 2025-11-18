@@ -6,7 +6,8 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription } from './ui/alert';
 import { Badge } from './ui/badge';
-import { Mail, Send, Users as UsersIcon, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Mail, Send, Users as UsersIcon, CheckCircle2, XCircle, Clock, Link2, Copy, Check } from 'lucide-react';
 import { companyApi, type Invitation } from '../lib/companyApi';
 
 interface InviteUserProps {
@@ -23,6 +24,12 @@ export function InviteUser({ companyId, companyName, currentUserId, onInviteSent
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // Для генерации ссылки
+  const [inviteLinkRole, setInviteLinkRole] = useState<'admin' | 'member'>('member');
+  const [generatedLink, setGeneratedLink] = useState('');
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,6 +68,37 @@ export function InviteUser({ companyId, companyName, currentUserId, onInviteSent
     }
   };
 
+  const handleGenerateLink = async () => {
+    setError('');
+    setGeneratedLink('');
+    setIsGeneratingLink(true);
+
+    try {
+      const result = await companyApi.generateInviteLink({
+        companyId,
+        role: inviteLinkRole
+      });
+
+      setGeneratedLink(result.inviteLink);
+      setSuccess('Ссылка успешно создана!');
+    } catch (err) {
+      setError('Не удалось создать ссылку-приглашение');
+      console.error('Ошибка генерации ссылки:', err);
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (err) {
+      console.error('Ошибка копирования:', err);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -73,7 +111,20 @@ export function InviteUser({ companyId, companyName, currentUserId, onInviteSent
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <Tabs defaultValue="email" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="email">
+              <Mail className="w-4 h-4 mr-2" />
+              Email / Telegram
+            </TabsTrigger>
+            <TabsTrigger value="link">
+              <Link2 className="w-4 h-4 mr-2" />
+              Ссылка-приглашение
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="email">
+            <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -150,6 +201,102 @@ export function InviteUser({ companyId, companyName, currentUserId, onInviteSent
             {isLoading ? 'Отправка...' : 'Отправить приглашение'}
           </Button>
         </form>
+          </TabsContent>
+
+          <TabsContent value="link" className="space-y-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="link-role">Роль для приглашенных</Label>
+                <Select 
+                  value={inviteLinkRole} 
+                  onValueChange={(value: string) => setInviteLinkRole(value as 'admin' | 'member')}
+                >
+                  <SelectTrigger id="link-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="member">
+                      <div className="flex items-center gap-2">
+                        <UsersIcon className="w-4 h-4" />
+                        <span>Участник</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <UsersIcon className="w-4 h-4" />
+                        <span>Администратор</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {inviteLinkRole === 'admin' 
+                    ? 'Администраторы могут управлять проектами и приглашать пользователей' 
+                    : 'Участники могут работать с проектами и альбомами'}
+                </p>
+              </div>
+
+              <Button 
+                type="button" 
+                className="w-full" 
+                onClick={handleGenerateLink}
+                disabled={isGeneratingLink}
+              >
+                <Link2 className="w-4 h-4 mr-2" />
+                {isGeneratingLink ? 'Создание...' : 'Создать ссылку-приглашение'}
+              </Button>
+
+              {generatedLink && (
+                <div className="space-y-2">
+                  <Label>Пригласительная ссылка</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={generatedLink}
+                      readOnly
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCopyLink}
+                      className="shrink-0"
+                    >
+                      {linkCopied ? (
+                        <>
+                          <Check className="w-4 h-4 mr-2" />
+                          Скопировано
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 mr-2" />
+                          Копировать
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Отправьте эту ссылку людям, которых хотите пригласить. 
+                    Они смогут войти через Telegram и автоматически присоединятся к компании.
+                  </p>
+                </div>
+              )}
+
+              {error && (
+                <Alert variant="destructive">
+                  <XCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {success && (
+                <Alert className="border-green-500 text-green-700">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>{success}</AlertDescription>
+                </Alert>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

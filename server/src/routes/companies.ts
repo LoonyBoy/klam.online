@@ -18,6 +18,12 @@ router.post('/invitations/:id/accept', authenticateToken, companyController.acce
 // Отклонить приглашение
 router.post('/invitations/:id/decline', companyController.declineInvitation);
 
+// Сгенерировать пригласительную ссылку (требует аутентификацию)
+router.post('/:companyId/invitations/generate-link', authenticateToken, companyController.generateInviteLink);
+
+// Получить информацию о приглашении по токену (не требует аутентификацию)
+router.get('/invitations/:token/info', companyController.getInvitationInfo);
+
 // Проверить доступ пользователя к компании (требует аутентификацию)
 router.get('/:companyId/check', authenticateToken, companyController.checkUserAccess);
 
@@ -26,6 +32,9 @@ router.get('/:companyId/projects', authenticateToken, projectController.getCompa
 
 // Получить детальную информацию о проекте (требует аутентификацию)
 router.get('/:companyId/projects/:projectId', authenticateToken, projectController.getProjectDetails);
+
+// Обновить статус проекта (требует аутентификацию)
+router.put('/:companyId/projects/:projectId/status', authenticateToken, projectController.updateProjectStatus);
 
 // Получить альбомы проекта (требует аутентификацию)
 router.get('/:companyId/projects/:projectId/albums', authenticateToken, albumController.getProjectAlbums);

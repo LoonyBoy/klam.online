@@ -39,11 +39,24 @@ export function TelegramAuthCallback() {
     try {
       console.log('📤 Отправка данных на backend...');
       
+      // Проверяем, есть ли токен приглашения в sessionStorage
+      const inviteToken = sessionStorage.getItem('inviteToken');
+      if (inviteToken) {
+        console.log('🎟️ Найден токен приглашения:', inviteToken);
+      }
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Передаем inviteToken в заголовке, чтобы не ломать хеш Telegram
+      if (inviteToken) {
+        headers['X-Invite-Token'] = inviteToken;
+      }
+      
       const response = await fetch('/api/auth/telegram', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(user)
       });
 
@@ -60,6 +73,12 @@ export function TelegramAuthCallback() {
 
       const data = await response.json();
       console.log('✅ Авторизация успешна:', data);
+      
+      // Если использовали токен приглашения, удаляем его
+      if (inviteToken) {
+        sessionStorage.removeItem('inviteToken');
+        console.log('🗑️ Токен приглашения удален из sessionStorage');
+      }
       
       // Сохраняем токен и данные пользователя
       localStorage.setItem('authToken', data.token);

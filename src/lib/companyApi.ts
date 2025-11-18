@@ -191,6 +191,25 @@ export const companyApi = {
     return data;
   },
 
+  // Обновить статус проекта
+  async updateProjectStatus(companyId: string, projectId: string, status: 'active' | 'pause' | 'archive'): Promise<any> {
+    console.log('📤 Updating project status:', { companyId, projectId, status });
+    
+    const response = await fetch(`/api/companies/${companyId}/projects/${projectId}/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to update project status');
+    }
+
+    const data = await response.json();
+    console.log('✅ Project status updated:', data);
+    return data;
+  },
+
   // Получить шаблоны альбомов компании
   async getAlbumTemplates(companyId: string): Promise<any> {
     console.log('📤 Fetching album templates for company:', companyId);
@@ -443,6 +462,28 @@ export const companyApi = {
     };
     
     return invitation;
+  },
+
+  // Сгенерировать ссылку-приглашение
+  async generateInviteLink(data: {
+    companyId: string;
+    role: 'admin' | 'member';
+  }): Promise<{ inviteLink: string; token: string }> {
+    console.log('🔗 Generating invite link:', data);
+    
+    const response = await fetch(`/api/companies/${data.companyId}/invitations/generate-link`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ role: data.role })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate invite link');
+    }
+
+    const result = await response.json();
+    console.log('✅ Invite link generated:', result);
+    return result;
   },
 
   // Получить участников компании

@@ -244,6 +244,121 @@ export async function declineInvitation(req: Request, res: Response) {
 }
 
 /**
+ * GET /api/invitations/:token/info
+ * Получить информацию о приглашении по токену
+ */
+export async function getInvitationInfo(req: Request, res: Response) {
+  try {
+    const { token } = req.params;
+
+    console.log('🔍 Проверка токена приглашения:', token);
+
+    // Получаем информацию о приглашении
+    const [invitations] = await pool.query<RowDataPacket[]>(
+      `SELECT i.id, i.company_id, i.role, i.expires_at, i.max_uses, i.used_count, c.name as company_name
+       FROM invitations i
+       INNER JOIN companies c ON i.company_id = c.id
+       WHERE i.token = ?
+         AND (i.expires_at IS NULL OR i.expires_at > NOW())
+         AND (i.max_uses IS NULL OR i.used_count < i.max_uses)`,
+      [token]
+    );
+
+    if (invitations.length === 0) {
+      return res.status(404).json({
+        success: false,
+        isValid: false,
+        error: 'Invitation not found or expired'
+      });
+    }
+
+    const invitation = invitations[0];
+
+    res.json({
+      success: true,
+      isValid: true,
+      companyName: invitation.company_name,
+      role: invitation.role,
+      expiresAt: invitation.expires_at
+    });
+
+  } catch (error) {
+    console.error('❌ Error in getInvitationInfo:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get invitation info'
+    });
+  }
+}
+
+/**
+ * POST /api/companies/:companyId/invitations/generate-link
+ * Сгенерировать пригласительную ссылку
+ */
+export async function generateInviteLink(req: Request, res: Response) {
+  try {
+    const { companyId } = req.params;
+    const { role } = req.body;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized'
+      });
+    }
+
+    console.log('🔗 Генерация пригласительной ссылки:', { companyId, role, userId });
+
+    // Проверяем, что пользователь имеет право приглашать (owner или admin)
+    const [userRoles] = await pool.query<RowDataPacket[]>(
+      'SELECT role_in_company FROM company_users WHERE company_id = ? AND user_id = ?',
+      [companyId, userId]
+    );
+
+    if (userRoles.length === 0 || !['owner', 'admin'].includes(userRoles[0].role_in_company)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied. Only owners and admins can generate invite links.'
+      });
+    }
+
+    // Генерируем уникальный токен
+    const crypto = await import('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+
+    // Создаем запись в таблице invitations
+    const [result] = await pool.query<ResultSetHeader>(
+      `INSERT INTO invitations 
+        (token, company_id, role, created_by_user_id, max_uses, used_count, expires_at) 
+       VALUES (?, ?, ?, ?, NULL, 0, DATE_ADD(NOW(), INTERVAL 30 DAY))`,
+      [token, companyId, role, userId]
+    );
+
+    console.log('✅ Пригласительная ссылка создана:', { token, invitationId: result.insertId });
+
+    // Формируем полную ссылку
+    // Используем переменную окружения для фронтенд URL или определяем по заголовкам
+    const frontendUrl = process.env.FRONTEND_URL || 'https://waldo-gamic-clark.ngrok-free.dev';
+    const inviteLink = `${frontendUrl}/invite/${token}`;
+
+    res.json({
+      success: true,
+      token,
+      inviteLink,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error in generateInviteLink:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate invite link'
+    });
+  }
+}
+
+/**
  * POST /api/companies
  * Создать новую компанию
  */

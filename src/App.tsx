@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { LandingPage } from './components/LandingPage';
 import { LoginPage } from './components/LoginPage';
 import { Onboarding } from './components/Onboarding';
@@ -12,6 +13,8 @@ import { Settings } from './components/Settings';
 import { Reports } from './components/Reports';
 import { Sections } from './components/Sections';
 import { Sidebar } from './components/Sidebar';
+import { InvitePage } from './components/InvitePage';
+import { TelegramAuthCallback } from './components/TelegramAuthCallback';
 
 export type Page = 'landing' | 'login' | 'onboarding' | 'dashboard' | 'projects' | 'project' | 'album' | 'albums-view' | 'users' | 'settings' | 'reports' | 'sections';
 
@@ -400,8 +403,13 @@ export default function App() {
     setCurrentPage('albums-view');
   };
 
-  // Показываем загрузку при проверке авторизации
-  if (isCheckingAuth) {
+  const location = useLocation();
+  
+  // Специальные роуты (приглашение и Telegram callback)
+  const isSpecialRoute = location.pathname.startsWith('/invite/') || location.pathname === '/auth/telegram/callback';
+
+  // Показываем загрузку при проверке авторизации (но не для специальных роутов)
+  if (isCheckingAuth && !isSpecialRoute) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
         <div className="text-center">
@@ -409,6 +417,16 @@ export default function App() {
           <p className="text-gray-600">Проверка авторизации...</p>
         </div>
       </div>
+    );
+  }
+
+  // Обработка специальных роутов
+  if (isSpecialRoute) {
+    return (
+      <Routes>
+        <Route path="/invite/:token" element={<InvitePage />} />
+        <Route path="/auth/telegram/callback" element={<TelegramAuthCallback />} />
+      </Routes>
     );
   }
 

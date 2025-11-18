@@ -494,6 +494,7 @@ export async function getProjectDetails(req: Request, res: Response) {
         p.name,
         p.code,
         p.customer_company_name,
+        p.status,
         p.created_at,
         p.updated_at,
         u.id as owner_id,
@@ -641,6 +642,7 @@ export async function getProjectDetails(req: Request, res: Response) {
       name: project.name,
       code: project.code,
       customerCompanyName: project.customer_company_name || '',
+      status: project.status || 'active',
       createdAt: project.created_at,
       updatedAt: project.updated_at,
       owner: project.owner_id ? {
@@ -674,6 +676,86 @@ export async function getProjectDetails(req: Request, res: Response) {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch project details',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+/**
+ * PUT /api/companies/:companyId/projects/:projectId/status
+ * Обновить статус проекта
+ */
+export async function updateProjectStatus(req: Request, res: Response) {
+  try {
+    const { companyId, projectId } = req.params;
+    const { status } = req.body;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized'
+      });
+    }
+
+    // Валидация статуса
+    const validStatuses = ['active', 'pause', 'archive'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid status value. Must be one of: active, pause, archive'
+      });
+    }
+
+    console.log('📥 Обновление статуса проекта:', { companyId, projectId, status, userId });
+
+    // Проверяем, что пользователь является членом компании
+    const [userCompanies] = await pool.query<RowDataPacket[]>(
+      `SELECT cu.role_in_company
+       FROM company_users cu
+       WHERE cu.company_id = ? AND cu.user_id = ?`,
+      [companyId, userId]
+    );
+
+    if (userCompanies.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    // Проверяем существование проекта
+    const [projects] = await pool.query<RowDataPacket[]>(
+      'SELECT id, status FROM projects WHERE id = ? AND company_id = ?',
+      [projectId, companyId]
+    );
+
+    if (projects.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found'
+      });
+    }
+
+    // Обновляем статус
+    await pool.query(
+      'UPDATE projects SET status = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+      [status, projectId, companyId]
+    );
+
+    console.log(`✅ Статус проекта ${projectId} обновлён на ${status}`);
+
+    res.json({
+      success: true,
+      message: 'Project status updated successfully',
+      status
+    });
+
+  } catch (error) {
+    console.error('❌ Error in updateProjectStatus:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update project status',
       details: error instanceof Error ? error.message : String(error)
     });
   }

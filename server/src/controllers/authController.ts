@@ -100,6 +100,58 @@ export async function telegramAuth(req: Request, res: Response) {
       console.log('✨ Created new user:', userId);
     }
 
+    // Обрабатываем токен приглашения из заголовка
+    const inviteToken = req.headers['x-invite-token'] as string;
+    if (inviteToken) {
+      console.log('🎟️ Обработка токена приглашения:', inviteToken);
+
+      try {
+        // Проверяем валидность приглашения
+        const [invitations] = await pool.query<RowDataPacket[]>(
+          `SELECT id, company_id, role, max_uses, used_count, expires_at 
+           FROM invitations 
+           WHERE token = ? 
+             AND (expires_at IS NULL OR expires_at > NOW())
+             AND (max_uses IS NULL OR used_count < max_uses)`,
+          [inviteToken]
+        );
+
+        if (invitations.length > 0) {
+          const invitation = invitations[0];
+          
+          // Проверяем, не состоит ли пользователь уже в этой компании
+          const [existing] = await pool.query<RowDataPacket[]>(
+            'SELECT id FROM company_users WHERE company_id = ? AND user_id = ?',
+            [invitation.company_id, userId]
+          );
+
+          if (existing.length === 0) {
+            // Добавляем пользователя в компанию
+            await pool.query(
+              `INSERT INTO company_users (company_id, user_id, role_in_company, created_at)
+               VALUES (?, ?, ?, NOW())`,
+              [invitation.company_id, userId, invitation.role]
+            );
+
+            // Увеличиваем счетчик использований
+            await pool.query(
+              'UPDATE invitations SET used_count = used_count + 1 WHERE id = ?',
+              [invitation.id]
+            );
+
+            console.log(`✅ Пользователь ${userId} добавлен в компанию ${invitation.company_id} с ролью ${invitation.role}`);
+          } else {
+            console.log('ℹ️ Пользователь уже состоит в этой компании');
+          }
+        } else {
+          console.warn('⚠️ Приглашение недействительно или истекло:', inviteToken);
+        }
+      } catch (inviteError) {
+        console.error('❌ Ошибка обработки приглашения:', inviteError);
+        // Не прерываем авторизацию, если не удалось обработать приглашение
+      }
+    }
+
     // Создаем JWT токен
     const token = generateToken({
       userId,
