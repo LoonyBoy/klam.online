@@ -141,9 +141,13 @@ export async function getRecentEvents(req: Request, res: Response) {
     // Форматируем результат
     const formattedEvents = events.map(row => ({
       id: row.id,
-      albumName: row.albumName,
-      albumCode: row.albumCode,
-      projectName: row.projectName,
+      album: {
+        name: row.albumName,
+        code: row.albumCode
+      },
+      project: {
+        name: row.projectName
+      },
       status: {
         code: row.statusCode,
         name: row.statusName

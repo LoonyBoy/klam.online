@@ -39,7 +39,8 @@ export function Users() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<string | null>(null);
   
-  const [userName, setUserName] = useState('');
+  const [userFirstName, setUserFirstName] = useState('');
+  const [userLastName, setUserLastName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userTelegram, setUserTelegram] = useState('');
   const [userRole, setUserRole] = useState('');
@@ -79,8 +80,8 @@ export function Users() {
   };
 
   const handleAddUser = async () => {
-    if (!userName || !userRole) {
-      alert('Пожалуйста, заполните обязательные поля: ФИО и Роль');
+    if (!userFirstName || !userRole) {
+      alert('Пожалуйста, заполните обязательные поля: Имя и Роль');
       return;
     }
 
@@ -91,10 +92,8 @@ export function Users() {
         return;
       }
 
-      // Разделяем ФИО на имя и фамилию
-      const nameParts = userName.trim().split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
+      const firstName = userFirstName.trim();
+      const lastName = userLastName.trim();
 
       // Находим ID отдела по коду
       const departmentId = userDepartment 
@@ -114,7 +113,8 @@ export function Users() {
       setIsAddUserOpen(false);
       
       // Очистка формы
-      setUserName('');
+      setUserFirstName('');
+      setUserLastName('');
       setUserEmail('');
       setUserTelegram('');
       setUserRole('');
@@ -131,7 +131,8 @@ export function Users() {
   const handleEditUser = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
-      setUserName(`${user.firstName} ${user.lastName || ''}`);
+      setUserFirstName(user.firstName);
+      setUserLastName(user.lastName || '');
       setUserEmail(user.email || '');
       setUserTelegram(user.telegramUsername || '');
       setUserRole(user.roleType || '');
@@ -141,8 +142,8 @@ export function Users() {
   };
 
   const handleSaveEdit = async () => {
-    if (!userName || !userRole || !editingUser) {
-      alert('Пожалуйста, заполните обязательные поля: ФИО и Роль');
+    if (!userFirstName || !userRole || !editingUser) {
+      alert('Пожалуйста, заполните обязательные поля: Имя и Роль');
       return;
     }
 
@@ -153,10 +154,8 @@ export function Users() {
         return;
       }
 
-      // Разделяем ФИО на имя и фамилию
-      const nameParts = userName.trim().split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
+      const firstName = userFirstName.trim();
+      const lastName = userLastName.trim();
 
       // Находим ID отдела по коду
       const departmentId = userDepartment 
@@ -175,7 +174,8 @@ export function Users() {
       console.log('✅ Участник успешно обновлён');
       
       setEditingUser(null);
-      setUserName('');
+      setUserFirstName('');
+      setUserLastName('');
       setUserEmail('');
       setUserTelegram('');
       setUserRole('');
@@ -264,12 +264,21 @@ export function Users() {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="user-name">ФИО</Label>
+                  <Label htmlFor="user-first-name">Имя</Label>
                   <Input
-                    id="user-name"
-                    placeholder="Иванов Иван Иванович"
-                    value={userName}
-                    onChange={(e) => setUserName(e.target.value)}
+                    id="user-first-name"
+                    placeholder="Иван"
+                    value={userFirstName}
+                    onChange={(e) => setUserFirstName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="user-last-name">Фамилия</Label>
+                  <Input
+                    id="user-last-name"
+                    placeholder="Иванов"
+                    value={userLastName}
+                    onChange={(e) => setUserLastName(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -406,7 +415,8 @@ export function Users() {
                           onOpenChange={(open) => {
                             if (!open) {
                               setEditingUser(null);
-                              setUserName('');
+                              setUserFirstName('');
+                              setUserLastName('');
                               setUserEmail('');
                               setUserTelegram('');
                               setUserRole('');
@@ -432,11 +442,19 @@ export function Users() {
                           </DialogHeader>
                           <div className="space-y-4 py-4">
                             <div className="space-y-2">
-                              <Label htmlFor="edit-user-name">ФИО</Label>
+                              <Label htmlFor="edit-user-first-name">Имя</Label>
                               <Input
-                                id="edit-user-name"
-                                value={userName}
-                                onChange={(e) => setUserName(e.target.value)}
+                                id="edit-user-first-name"
+                                value={userFirstName}
+                                onChange={(e) => setUserFirstName(e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="edit-user-last-name">Фамилия</Label>
+                              <Input
+                                id="edit-user-last-name"
+                                value={userLastName}
+                                onChange={(e) => setUserLastName(e.target.value)}
                               />
                             </div>
                             <div className="space-y-2">
@@ -489,7 +507,8 @@ export function Users() {
                               variant="outline" 
                               onClick={() => {
                                 setEditingUser(null);
-                                setUserName('');
+                                setUserFirstName('');
+                                setUserLastName('');
                                 setUserEmail('');
                                 setUserTelegram('');
                                 setUserRole('');
@@ -578,7 +597,8 @@ export function Users() {
                             onOpenChange={(open) => {
                               if (!open) {
                                 setEditingUser(null);
-                                setUserName('');
+                                setUserFirstName('');
+                                setUserLastName('');
                                 setUserEmail('');
                                 setUserTelegram('');
                                 setUserRole('');
@@ -604,11 +624,19 @@ export function Users() {
                               </DialogHeader>
                               <div className="space-y-4 py-4">
                                 <div className="space-y-2">
-                                  <Label htmlFor="edit-user-name">ФИО</Label>
+                                  <Label htmlFor="edit-user-first-name-desktop">Имя</Label>
                                   <Input
-                                    id="edit-user-name"
-                                    value={userName}
-                                    onChange={(e) => setUserName(e.target.value)}
+                                    id="edit-user-first-name-desktop"
+                                    value={userFirstName}
+                                    onChange={(e) => setUserFirstName(e.target.value)}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="edit-user-last-name-desktop">Фамилия</Label>
+                                  <Input
+                                    id="edit-user-last-name-desktop"
+                                    value={userLastName}
+                                    onChange={(e) => setUserLastName(e.target.value)}
                                   />
                                 </div>
                                 <div className="space-y-2">
@@ -661,7 +689,8 @@ export function Users() {
                                   variant="outline" 
                                   onClick={() => {
                                     setEditingUser(null);
-                                    setUserName('');
+                                    setUserFirstName('');
+                                    setUserLastName('');
                                     setUserEmail('');
                                     setUserTelegram('');
                                     setUserRole('');

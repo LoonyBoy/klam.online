@@ -85,7 +85,8 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
 
   // Шаг 3: Пользователи
   const [users, setUsers] = useState<User[]>([]);
-  const [newUserName, setNewUserName] = useState('');
+  const [newUserFirstName, setNewUserFirstName] = useState('');
+  const [newUserLastName, setNewUserLastName] = useState('');
   const [newUserTelegram, setNewUserTelegram] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserDepartment, setNewUserDepartment] = useState('');
@@ -224,7 +225,7 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
 
   // Управление пользователями
     const addUser = async () => {
-    if (newUserName.trim() && newUserTelegram.trim() && newUserEmail.trim() && newUserDepartment) {
+    if (newUserFirstName.trim() && newUserTelegram.trim() && newUserEmail.trim() && newUserDepartment) {
       try {
         // Получаем отдел
         const department = departments.find(d => d.id === newUserDepartment);
@@ -233,10 +234,8 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
           return;
         }
 
-        // Разбиваем имя на firstName и lastName
-        const nameParts = newUserName.trim().split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
+        const firstName = newUserFirstName.trim();
+        const lastName = newUserLastName.trim();
 
         // Создаем участника в базе данных (backend принимает departmentCode, не ID)
         const result = await createParticipant(companyId, {
@@ -254,7 +253,7 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
           {
             id: Date.now().toString(),
             participantId: result.participantId,
-            name: newUserName.trim(),
+            name: `${firstName} ${lastName}`.trim(),
             telegramUsername: newUserTelegram.trim(),
             email: newUserEmail.trim(),
             departmentId: newUserDepartment,
@@ -262,7 +261,8 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
           },
         ]);
         
-        setNewUserName('');
+        setNewUserFirstName('');
+        setNewUserLastName('');
         setNewUserTelegram('');
         setNewUserEmail('');
         setNewUserDepartment('');
@@ -661,12 +661,22 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label htmlFor="user-name">Имя</Label>
+                            <Label htmlFor="user-first-name">Имя</Label>
                             <Input
-                              id="user-name"
-                              placeholder="Иван Иванов"
-                              value={newUserName}
-                              onChange={(e) => setNewUserName(e.target.value)}
+                              id="user-first-name"
+                              placeholder="Иван"
+                              value={newUserFirstName}
+                              onChange={(e) => setNewUserFirstName(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="user-last-name">Фамилия</Label>
+                            <Input
+                              id="user-last-name"
+                              placeholder="Иванов"
+                              value={newUserLastName}
+                              onChange={(e) => setNewUserLastName(e.target.value)}
                             />
                           </div>
 

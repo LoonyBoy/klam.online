@@ -60,25 +60,19 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
   const totalAlbums = projects.reduce((sum: number, p: any) => sum + p.stats.totalAlbums, 0);
   const activeAlbums = projects.reduce((sum: number, p: any) => sum + p.stats.activeAlbums, 0);
 
-  const getEventBadgeColor = (type: string) => {
-    // Статус может быть в формате #code или просто code
-    const statusCode = type.replace('#', '');
-    
+  const getEventBadgeColor = (statusCode: string) => {
     switch (statusCode) {
-      case 'замечания':
       case 'remarks': 
         return 'destructive';
-      case 'выгрузка':
       case 'upload':
+        return 'secondary';
       case 'sent':
         return 'default';
-      case 'принято':
       case 'accepted':
-        return 'default';
-      case 'отклонено':
-        return 'destructive';
-      case 'правки':
+        return 'secondary';
       case 'pending':
+        return 'outline';
+      case 'production':
         return 'default';
       default: 
         return 'default';
@@ -207,22 +201,36 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
                 <p>Нет событий</p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {events.map((event) => {
-                  const eventType = `#${event.status.code}`;
-                  const userName = `${event.createdBy.firstName} ${event.createdBy.lastName || ''}`;
-                  const roleLabel = event.createdBy.role === 'customer' ? ' (Заказчик)' : '';
+                  const statusName = event.status.name;
+                  const userName = `${event.createdBy.firstName} ${event.createdBy.lastName || ''}`.trim();
+                  const roleLabel = event.createdBy.role === 'customer' ? 'Заказчик' : 'Исполнитель';
+                  const projectName = event.project?.name || 'Неизвестный проект';
+                  const albumName = event.album?.name || '';
                   
                   return (
-                    <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-200">
-                      <Badge variant={getEventBadgeColor(eventType)} className="mt-0.5 shrink-0">
-                        {eventType}
-                      </Badge>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-900">{event.comment || event.status.name}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {userName.trim()}{roleLabel} • {formatDateTime(event.createdAt)}
-                        </p>
+                    <div key={event.id} className="p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 transition-all">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 mb-0.5">{projectName}</p>
+                          {albumName && (
+                            <p className="text-xs text-gray-600">{albumName}</p>
+                          )}
+                        </div>
+                        <Badge variant={getEventBadgeColor(event.status.code)} className="shrink-0">
+                          {statusName}
+                        </Badge>
+                      </div>
+                      {event.comment && (
+                        <p className="text-sm text-gray-700 mb-2">{event.comment}</p>
+                      )}
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span>{userName}</span>
+                        <span>•</span>
+                        <span>{roleLabel}</span>
+                        <span>•</span>
+                        <span>{formatDateTime(event.createdAt)}</span>
                       </div>
                     </div>
                   );

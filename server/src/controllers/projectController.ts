@@ -61,7 +61,7 @@ export async function getCompanyProjects(req: Request, res: Response) {
         const [albumStats] = await pool.query<RowDataPacket[]>(
           `SELECT 
             COUNT(*) as total_albums,
-            SUM(CASE WHEN status_id IN (SELECT id FROM album_statuses WHERE name IN ('В работе', 'На проверке')) THEN 1 ELSE 0 END) as active_albums
+            SUM(CASE WHEN status_id IN (SELECT id FROM album_statuses WHERE code IN ('sent', 'pending', 'remarks', 'production')) THEN 1 ELSE 0 END) as active_albums
            FROM albums
            WHERE project_id = ?`,
           [project.id]

@@ -91,37 +91,31 @@ export const getCompanyUsersStats = async (req: Request, res: Response) => {
   try {
     const { companyId } = req.params;
 
-    // Общее количество пользователей
+    // Общее количество активных участников
     const [totalRows] = await pool.query<RowDataPacket[]>(
       `SELECT COUNT(*) as total
-       FROM company_users
-       WHERE company_id = ?`,
+       FROM participants
+       WHERE company_id = ? AND is_active = 1`,
       [companyId]
     );
 
     // Количество исполнителей (участников с role_type = 'executor')
     const [executorsRows] = await pool.query<RowDataPacket[]>(
-      `SELECT COUNT(DISTINCT p.id) as total
-       FROM participants p
-       INNER JOIN company_users cu ON p.telegram_id = (
-         SELECT telegram_id FROM users WHERE id = cu.user_id
-       )
-       WHERE p.company_id = ? 
-       AND p.role_type = 'executor'
-       AND p.is_active = TRUE`,
+      `SELECT COUNT(*) as total
+       FROM participants
+       WHERE company_id = ? 
+       AND role_type = 'executor'
+       AND is_active = 1`,
       [companyId]
     );
 
     // Количество заказчиков (участников с role_type = 'customer')
     const [customersRows] = await pool.query<RowDataPacket[]>(
-      `SELECT COUNT(DISTINCT p.id) as total
-       FROM participants p
-       INNER JOIN company_users cu ON p.telegram_id = (
-         SELECT telegram_id FROM users WHERE id = cu.user_id
-       )
-       WHERE p.company_id = ? 
-       AND p.role_type = 'customer'
-       AND p.is_active = TRUE`,
+      `SELECT COUNT(*) as total
+       FROM participants
+       WHERE company_id = ? 
+       AND role_type = 'customer'
+       AND is_active = 1`,
       [companyId]
     );
 
