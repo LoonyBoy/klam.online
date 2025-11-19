@@ -683,6 +683,166 @@ export async function createAlbum(req: Request, res: Response): Promise<void> {
   }
 }
 
+/**
+ * PUT /api/companies/:companyId/projects/:projectId/albums/:albumId
+ * Обновить альбом в проекте
+ */
+export async function updateAlbum(req: Request, res: Response): Promise<void> {
+  const connection = await pool.getConnection();
+  
+  try {
+    const { companyId, projectId, albumId } = req.params;
+    const { 
+      name, 
+      code, 
+      departmentId, 
+      executorId, 
+      customerId, 
+      deadline, 
+      comment, 
+      link 
+    } = req.body;
+
+    const userId = (req as any).user?.id;
+
+    console.log('📝 Updating album:', { 
+      companyId, 
+      projectId, 
+      albumId, 
+      name, 
+      code, 
+      departmentId, 
+      executorId, 
+      customerId,
+      deadline,
+      comment,
+      link,
+      userId 
+    });
+
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    // Проверяем, что проект принадлежит компании
+    const [projects] = await connection.query<RowDataPacket[]>(
+      'SELECT id FROM projects WHERE id = ? AND company_id = ?',
+      [projectId, companyId]
+    );
+
+    if (projects.length === 0) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    // Проверяем, что альбом принадлежит проекту
+    const [albums] = await connection.query<RowDataPacket[]>(
+      'SELECT id FROM albums WHERE id = ? AND project_id = ?',
+      [albumId, projectId]
+    );
+
+    if (albums.length === 0) {
+      res.status(404).json({ error: 'Album not found' });
+      return;
+    }
+
+    // Если меняется код, проверяем на дубликат
+    if (code) {
+      const [existingAlbums] = await connection.query<RowDataPacket[]>(
+        'SELECT id FROM albums WHERE project_id = ? AND code = ? AND id != ?',
+        [projectId, code, albumId]
+      );
+
+      if (existingAlbums.length > 0) {
+        res.status(400).json({ 
+          error: `Альбом с кодом "${code}" уже существует в этом проекте`,
+          code: 'DUPLICATE_ALBUM_CODE'
+        });
+        return;
+      }
+    }
+
+    await connection.beginTransaction();
+
+    // Формируем запрос UPDATE только для переданных полей
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      values.push(name);
+    }
+    if (code !== undefined) {
+      updates.push('code = ?');
+      values.push(code);
+    }
+    if (departmentId !== undefined) {
+      updates.push('department_id = ?');
+      values.push(departmentId);
+    }
+    if (executorId !== undefined) {
+      updates.push('executor_id = ?');
+      values.push(executorId || null);
+    }
+    if (customerId !== undefined) {
+      updates.push('customer_id = ?');
+      values.push(customerId || null);
+    }
+    if (deadline !== undefined) {
+      updates.push('deadline = ?');
+      values.push(deadline || null);
+    }
+    if (comment !== undefined) {
+      updates.push('comment = ?');
+      values.push(comment || null);
+    }
+    if (link !== undefined) {
+      updates.push('link = ?');
+      values.push(link || null);
+    }
+
+    if (updates.length === 0) {
+      await connection.rollback();
+      res.status(400).json({ error: 'No fields to update' });
+      return;
+    }
+
+    // Добавляем updated_at
+    updates.push('updated_at = NOW()');
+
+    // Добавляем albumId в конец values
+    values.push(albumId);
+
+    const updateQuery = `UPDATE albums SET ${updates.join(', ')} WHERE id = ?`;
+    
+    console.log('📝 Update query:', updateQuery);
+    console.log('📝 Values:', values);
+
+    await connection.query(updateQuery, values);
+
+    await connection.commit();
+
+    console.log(`✅ Album updated with ID: ${albumId}`);
+
+    res.json({
+      success: true,
+      message: 'Album updated successfully'
+    });
+
+  } catch (error: any) {
+    await connection.rollback();
+    console.error('❌ Error updating album:', error);
+    
+    res.status(500).json({
+      error: 'Failed to update album',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    connection.release();
+  }
+}
+
 export async function deleteAlbum(req: Request, res: Response): Promise<void> {
   const { albumId, projectId, companyId } = req.params;
   const connection = await pool.getConnection();

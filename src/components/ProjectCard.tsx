@@ -17,7 +17,10 @@ import {
   Mail,
   Send,
   Plus,
-  Trash2
+  Trash2,
+  Play,
+  Pause,
+  Archive
 } from 'lucide-react';
 import { mockEvents } from '../lib/mockData';
 import { User as UserType } from '../App';
@@ -138,7 +141,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       const statusLabels = {
         active: 'В работе',
         pause: 'На паузе',
-        archive: 'В архиве'
+        archive: 'В архив'
       };
       
       toast.success(`Статус проекта изменён на "${statusLabels[newStatus]}"`);
@@ -337,54 +340,60 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
             </div>
             
             {/* Переключатель статуса */}
-            <div className="flex items-center gap-3">
-              {/* Рубильник В работе/Пауза c анимированной подложкой */}
-              <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1">
-                {/* Анимированная подложка */}
+            <div className="flex items-center flex-wrap gap-4">
+              {/* Рубильник В работе/Пауза с анимированной подложкой */}
+              <div className="relative inline-flex items-center bg-white border border-gray-200 rounded-full p-1 shadow-sm">
                 {(project.status === 'active' || project.status === 'pause') && (
                   <div
-                    className={`absolute top-1 h-[calc(100%-8px)] w-[calc(50%-4px)] rounded-full transition-all duration-300 ease-in-out ${
-                      project.status === 'active' ? 'left-1 bg-green-600' : 'left-[calc(50%+3px)] bg-red-600'
+                    className={`absolute top-1 h-[calc(100%-8px)] w-[calc(50%-6px)] rounded-full transition-all duration-300 ease-out ${
+                      project.status === 'active'
+                        ? 'left-1 bg-gradient-to-r from-emerald-100 to-emerald-200'
+                        : 'left-[calc(50%+5px)] bg-gradient-to-r from-rose-100 to-rose-200'
                     }`}
                   />
                 )}
 
-                {/* Кнопки */}
                 <button
                   onClick={() => handleUpdateStatus('active')}
                   disabled={isUpdatingStatus || project.status === 'active'}
-                  className={`relative z-10 px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 ${
+                  style={project.status === 'active' ? { color: 'rgb(5, 150, 105)' } : {}}
+                  className={`relative z-10 flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 ${
                     project.status === 'active'
-                      ? 'text-white'
-                      : 'text-gray-700 hover:text-gray-900'
+                      ? ''
+                      : 'text-gray-600 hover:text-gray-900'
                   } disabled:cursor-not-allowed`}
                 >
+                  <Play className="w-4 h-4" />
                   В работе
                 </button>
+
                 <button
                   onClick={() => handleUpdateStatus('pause')}
                   disabled={isUpdatingStatus || project.status === 'pause'}
-                  className={`relative z-10 px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 ${
+                  style={project.status === 'pause' ? { color: 'rgb(225, 29, 72)' } : {}}
+                  className={`relative z-10 flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 ${
                     project.status === 'pause'
-                      ? 'text-white'
-                      : 'text-gray-700 hover:text-gray-900'
+                      ? ''
+                      : 'text-gray-600 hover:text-gray-900'
                   } disabled:cursor-not-allowed`}
                 >
+                  <Pause className="w-4 h-4" />
                   Пауза
                 </button>
               </div>
-              
+
               {/* Кнопка архивации */}
               <button
                 onClick={() => handleUpdateStatus('archive')}
                 disabled={isUpdatingStatus || project.status === 'archive'}
-                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${
                   project.status === 'archive'
                     ? 'bg-black text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
-                В архиве
+                <Archive className="w-4 h-4" />
+                В архив
               </button>
             </div>
           </div>
@@ -463,7 +472,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="pt-4">
+          <CardContent className="p-0">
             {executors.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <UsersIcon className="w-12 h-12 mx-auto mb-2 opacity-30" />
@@ -532,7 +541,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="pt-4">
+          <CardContent className="p-0">
             {clients.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <User className="w-12 h-12 mx-auto mb-2 opacity-30" />
@@ -737,7 +746,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         <div className="grid grid-cols-2 gap-4">
           <button
             onClick={() => onNavigateToAlbumsView('СВОК ПД', project?.name || '')}
-            className="group bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-400 hover:shadow-md transition-all text-left"
+            className="group bg-white border-2 border-gray-200 rounded-xl p-3 hover:border-blue-400 hover:shadow-md transition-all text-left"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -759,7 +768,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
           
           <button
             onClick={() => onNavigateToAlbumsView('СВОК РД', project?.name || '')}
-            className="group bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-blue-400 hover:shadow-md transition-all text-left"
+            className="group bg-white border-2 border-gray-200 rounded-xl p-3 hover:border-blue-400 hover:shadow-md transition-all text-left"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">

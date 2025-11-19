@@ -42,6 +42,7 @@ export async function getCompanyProjects(req: Request, res: Response) {
         p.name,
         p.code,
         p.customer_company_name,
+        p.status,
         p.created_at,
         p.updated_at,
         u.id as owner_id,
@@ -74,6 +75,7 @@ export async function getCompanyProjects(req: Request, res: Response) {
           name: project.name,
           code: project.code,
           customerCompanyName: project.customer_company_name,
+          status: project.status || 'active',
           createdAt: project.created_at,
           updatedAt: project.updated_at,
           owner: project.owner_id ? {

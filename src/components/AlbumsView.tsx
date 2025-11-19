@@ -99,6 +99,42 @@ export function AlbumsView({
     }
   };
 
+  const handleUpdateAlbum = async (albumId: string, updatedData: any) => {
+    try {
+      console.log('Updating album:', albumId, updatedData);
+      
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Компания не найдена');
+        return;
+      }
+
+      // Преобразуем данные для API
+      const apiData: any = {};
+      
+      if (updatedData.name !== undefined) apiData.name = updatedData.name;
+      if (updatedData.code !== undefined) apiData.code = updatedData.code;
+      if (updatedData.department !== undefined) apiData.departmentId = parseInt(updatedData.department);
+      if (updatedData.executor !== undefined) apiData.executorId = updatedData.executor.id ? parseInt(updatedData.executor.id) : undefined;
+      if (updatedData.customer !== undefined) apiData.customerId = updatedData.customer.id ? parseInt(updatedData.customer.id) : undefined;
+      if (updatedData.deadline !== undefined) apiData.deadline = updatedData.deadline;
+      if (updatedData.comment !== undefined) apiData.comment = updatedData.comment;
+      if (updatedData.albumLink !== undefined) apiData.link = updatedData.albumLink;
+
+      // Обновляем альбом через API
+      await companyApi.updateAlbum(companyId, projectId, albumId, apiData);
+      
+      toast.success('Альбом успешно обновлен');
+      
+      // Обновляем список альбомов
+      await loadAlbums();
+      
+    } catch (error) {
+      console.error('Failed to update album:', error);
+      toast.error('Ошибка при обновлении альбома');
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 min-h-screen bg-gray-50">
       {/* Навигация назад */}
@@ -123,6 +159,7 @@ export function AlbumsView({
           onAlbumClick={onAlbumClick}
           onAddAlbum={handleAddAlbum}
           onQuickAdd={handleQuickAdd}
+          onUpdateAlbum={handleUpdateAlbum}
           onRetry={loadAlbums}
           isExpanded={true}
           isLoading={isLoading}

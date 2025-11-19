@@ -241,7 +241,7 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
             Найдено проектов: {filteredProjects.length}
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent className="p-0">
           {filteredProjects.length === 0 ? (
             <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
               <FolderKanban className="w-16 h-16 mx-auto mb-4 text-gray-400" />
@@ -263,8 +263,15 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
                         <span className="font-mono text-xs text-gray-500">{project.code}</span>
                         <h3 className="font-medium text-gray-900 mt-1">{project.name}</h3>
                       </div>
-                      <Badge variant="default" className="ml-2">
-                        {project.stats.activeAlbums > 0 ? 'Активный' : 'Неактивный'}
+                      <Badge 
+                        variant="default" 
+                        className="ml-2"
+                        style={{
+                          backgroundColor: project.status === 'active' ? 'rgb(5, 150, 105)' : project.status === 'pause' ? 'rgb(225, 29, 72)' : 'rgb(0, 0, 0)',
+                          color: 'white'
+                        }}
+                      >
+                        {project.status === 'active' ? 'В работе' : project.status === 'pause' ? 'Пауза' : 'В архиве'}
                       </Badge>
                     </div>
                     <div className="space-y-2 text-sm">
@@ -318,13 +325,13 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b-2 border-gray-200">
-                      <th className="text-left py-4 px-4 font-semibold text-gray-700">Шифр</th>
-                      <th className="text-left py-4 px-4 font-semibold text-gray-700">Название</th>
-                      <th className="text-left py-4 px-4 font-semibold text-gray-700">Заказчик</th>
-                      <th className="text-left py-4 px-4 font-semibold text-gray-700">Владелец</th>
-                      <th className="text-left py-4 px-4 font-semibold text-gray-700">Альбомов</th>
-                      <th className="text-left py-4 px-4 font-semibold text-gray-700">Статус</th>
-                      <th className="text-left py-4 px-4"></th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700">Шифр</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700">Название</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700">Заказчик</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700">Владелец</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700">Альбомов</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700">Статус</th>
+                      <th className="text-left py-2 px-3"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -334,33 +341,40 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
                         className="border-b border-gray-100 hover:bg-blue-50/50 transition-colors cursor-pointer group"
                         onClick={() => onNavigateToProject(project.id)}
                       >
-                        <td className="py-4 px-4">
+                        <td className="py-2 px-3">
                           <span className="font-mono text-sm text-gray-600 group-hover:text-blue-600 transition-colors">
                             {project.code}
                           </span>
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-2 px-3">
                           <span className="font-medium group-hover:text-blue-600 transition-colors">
                             {project.name}
                           </span>
                         </td>
-                        <td className="py-4 px-4 text-gray-600">{project.customerCompanyName || 'Не указан'}</td>
-                        <td className="py-4 px-4 text-gray-600">
+                        <td className="py-2 px-3 text-gray-600">{project.customerCompanyName || 'Не указан'}</td>
+                        <td className="py-2 px-3 text-gray-600">
                           {project.owner 
                             ? `${project.owner.firstName} ${project.owner.lastName || ''}`.trim()
                             : 'Не назначен'}
                         </td>
-                        <td className="py-4 px-4 text-center">
+                        <td className="py-2 px-3 text-center">
                           <Badge variant="outline">
                             {project.stats.activeAlbums} / {project.stats.totalAlbums}
                           </Badge>
                         </td>
-                        <td className="py-4 px-4">
-                          <Badge variant="default">
-                            {project.stats.activeAlbums > 0 ? 'Активный' : 'Неактивный'}
+                        <td className="py-2 px-3">
+                          <Badge 
+                            variant="default"
+                            style={{
+                              backgroundColor: project.status === 'active' ? 'rgb(5, 150, 105)' : project.status === 'pause' ? 'rgb(225, 29, 72)' : 'rgb(0, 0, 0)',
+                              color: 'white',
+                              border: 'none'
+                            }}
+                          >
+                            {project.status === 'active' ? 'В работе' : project.status === 'pause' ? 'Пауза' : 'В архиве'}
                           </Badge>
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-2 px-3">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button 
                               variant="ghost" 

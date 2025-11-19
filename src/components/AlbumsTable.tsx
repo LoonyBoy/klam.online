@@ -341,6 +341,16 @@ export function AlbumsTable({
     });
   };
 
+  // Format date to YYYY-MM-DD for date input
+  const formatDateForInput = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -740,20 +750,20 @@ export function AlbumsTable({
       {/* Table */}
       <div className={`rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm transition-all ${isExpanded ? 'max-h-none' : 'max-h-[600px]'}`}>
         <div className="overflow-x-auto overflow-y-auto max-h-full">
-          <table className="w-full" style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px' }}>
+          <table className="w-full" style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', tableLayout: 'fixed' }}>
             <thead className="sticky top-0 bg-[#E2E8F0]">
               <tr>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>№</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>Шифр</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[180px]" style={{ fontSize: '13px' }}>Название альбома</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>Отдел</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[140px]" style={{ fontSize: '13px' }}>Исполнитель</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[140px]" style={{ fontSize: '13px' }}>Заказчик</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>Дедлайн</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[150px]" style={{ fontSize: '13px' }}>Последнее событие</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>Ссылки</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[180px]" style={{ fontSize: '13px' }}>Комментарий</th>
-                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px' }}>Действия</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px', width: '50px' }}>№</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px', width: '80px' }}>Шифр</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[180px]" style={{ fontSize: '13px', width: '200px' }}>Название альбома</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px', width: '180px' }}>Отдел</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[140px]" style={{ fontSize: '13px', width: '160px' }}>Исполнитель</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[140px]" style={{ fontSize: '13px', width: '160px' }}>Заказчик</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px', width: '110px' }}>Дедлайн</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[150px]" style={{ fontSize: '13px', width: '150px' }}>Последнее событие</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px', width: '80px' }}>Ссылки</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700 min-w-[180px]" style={{ fontSize: '13px', width: '180px' }}>Комментарий</th>
+                <th className="text-left py-1 px-3 font-semibold text-gray-700" style={{ fontSize: '13px', width: '80px' }}>Действия</th>
               </tr>
             </thead>
             <tbody>
@@ -846,21 +856,25 @@ export function AlbumsTable({
                     <td className="py-1 px-3" onClick={(e) => isEditMode && e.stopPropagation()}>
                       {isEditMode ? (
                         <Select 
-                          value={currentAlbum.executor.name} 
+                          value={currentAlbum.executor?.id || ''} 
                           onValueChange={(val) => {
-                            const selectedExecutor = albums.find(a => a.executor.name === val)?.executor;
+                            const selectedExecutor = executors.find((e: any) => e.id === val);
                             if (selectedExecutor) {
-                              updateField('executor', selectedExecutor);
+                              updateField('executor', { id: selectedExecutor.id, name: selectedExecutor.name });
                             }
                           }}
                         >
                           <SelectTrigger className="h-7 text-xs">
-                            <SelectValue />
+                            <SelectValue placeholder="Выберите исполнителя" />
                           </SelectTrigger>
                           <SelectContent>
-                            {executors.slice(1).map(exec => (
-                              <SelectItem key={exec} value={exec}>{exec}</SelectItem>
-                            ))}
+                            {executors.length === 0 ? (
+                              <SelectItem value="empty" disabled>Нет исполнителей</SelectItem>
+                            ) : (
+                              executors.map((executor: any) => (
+                                <SelectItem key={executor.id} value={executor.id}>{executor.name}</SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                       ) : (
@@ -882,21 +896,46 @@ export function AlbumsTable({
                     </td>
                     
                     {/* Заказчик */}
-                    <td className="py-1 px-3">
-                      <div className="flex items-center gap-1.5">
-                        {album.customer && album.customer.name ? (
-                          <>
-                            <img 
-                              src={album.customer.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(album.customer.name)}&background=10B981&color=fff&size=32`}
-                              alt={album.customer.name}
-                              className="w-5 h-5 rounded-full"
-                            />
-                            <span className="text-gray-900 text-xs">{album.customer.name}</span>
-                          </>
-                        ) : (
-                          <span className="text-gray-400 text-xs">—</span>
-                        )}
-                      </div>
+                    <td className="py-1 px-3" onClick={(e) => isEditMode && e.stopPropagation()}>
+                      {isEditMode ? (
+                        <Select 
+                          value={currentAlbum.customer?.id || ''} 
+                          onValueChange={(val) => {
+                            const selectedCustomer = clients.find((c: any) => c.id === val);
+                            if (selectedCustomer) {
+                              updateField('customer', { id: selectedCustomer.id, name: selectedCustomer.name });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-7 text-xs">
+                            <SelectValue placeholder="Выберите заказчика" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {clients.length === 0 ? (
+                              <SelectItem value="empty" disabled>Нет заказчиков</SelectItem>
+                            ) : (
+                              clients.map((client: any) => (
+                                <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          {album.customer && album.customer.name ? (
+                            <>
+                              <img 
+                                src={album.customer.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(album.customer.name)}&background=10B981&color=fff&size=32`}
+                                alt={album.customer.name}
+                                className="w-5 h-5 rounded-full"
+                              />
+                              <span className="text-gray-900 text-xs">{album.customer.name}</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     
                     {/* Дедлайн */}
@@ -904,7 +943,7 @@ export function AlbumsTable({
                       {isEditMode ? (
                         <Input
                           type="date"
-                          value={currentAlbum.deadline}
+                          value={formatDateForInput(currentAlbum.deadline)}
                           onChange={(e) => updateField('deadline', e.target.value)}
                           className="h-7 text-xs"
                         />

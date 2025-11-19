@@ -280,6 +280,35 @@ export const companyApi = {
     return data;
   },
 
+  // Обновить альбом
+  async updateAlbum(companyId: string, projectId: string, albumId: string, albumData: {
+    name?: string;
+    code?: string;
+    departmentId?: number;
+    executorId?: number;
+    customerId?: number;
+    deadline?: string;
+    comment?: string;
+    link?: string;
+  }): Promise<any> {
+    console.log('📤 Updating album:', { companyId, projectId, albumId, albumData });
+    
+    const response = await fetch(`/api/companies/${companyId}/projects/${projectId}/albums/${albumId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(albumData)
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'Failed to update album');
+    }
+
+    const data = await response.json();
+    console.log('✅ Album updated:', data);
+    return data;
+  },
+
   // Получить статистику по альбомам компании
   async getAlbumsStatistics(companyId: string): Promise<{ activeRemarks: number }> {
     console.log('📤 Fetching albums statistics:', companyId);
