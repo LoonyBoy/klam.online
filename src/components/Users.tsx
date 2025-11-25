@@ -72,6 +72,10 @@ export function Users() {
         getDepartments()
       ]);
 
+      console.log('👥 Users loaded:', usersResponse.users);
+      console.log('🔍 First user structure:', usersResponse.users?.[0]);
+      console.log('👑 Admins/Owners:', usersResponse.users?.filter((u: User) => u.roleInCompany === 'owner' || u.roleInCompany === 'admin'));
+
       setUsers(usersResponse.users || []);
       setStats({
         totalUsers: statsResponse.totalUsers || 0,
@@ -456,8 +460,70 @@ export function Users() {
         </div>
       </div>
 
+      {/* Администрация компании */}
+      <Card className="border-gray-200 shadow-sm mb-6 md:mb-8">
+        <CardHeader className="bg-gradient-to-r from-indigo-50 to-white border-b">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <UserCog className="w-5 h-5" />
+            Администрация компании
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <div className="space-y-3">
+            {users.filter(u => u.roleInCompany === 'owner' || u.roleInCompany === 'admin').length === 0 ? (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                Администраторы не назначены
+              </div>
+            ) : (
+              users
+                .filter(u => u.roleInCompany === 'owner' || u.roleInCompany === 'admin')
+                .sort((a, b) => {
+                  if (a.roleInCompany === 'owner') return -1;
+                  if (b.roleInCompany === 'owner') return 1;
+                  return 0;
+                })
+                .map((user) => (
+                  <div key={user.id} className="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-medium ${
+                        user.roleInCompany === 'owner' 
+                          ? 'bg-gradient-to-br from-amber-400 to-orange-500' 
+                          : 'bg-gradient-to-br from-indigo-400 to-purple-500'
+                      }`}>
+                        {getInitials(user.firstName, user.lastName)}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-gray-900">
+                            {user.firstName} {user.lastName || ''}
+                          </p>
+                          <Badge variant={user.roleInCompany === 'owner' ? 'default' : 'secondary'} className={
+                            user.roleInCompany === 'owner'
+                              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                              : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white'
+                          }>
+                            {user.roleInCompany === 'owner' ? 'Владелец' : 'Администратор'}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {user.email || 'Нет email'}
+                          {user.telegramUsername && (
+                            <span className="ml-2 text-blue-600">
+                              @{user.telegramUsername}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Статистика */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
         <Card className="border-gray-200 hover:shadow-lg transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">Всего пользователей</CardTitle>
@@ -467,7 +533,7 @@ export function Users() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-blue-600">{stats.totalUsers}</div>
-            <p className="text-xs text-gray-500 mt-1">в системе</p>
+            <p className="text-xs text-gray-500 mt-1">зарегистрировано в системе</p>
           </CardContent>
         </Card>
 

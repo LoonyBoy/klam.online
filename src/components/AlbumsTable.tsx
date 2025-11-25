@@ -56,6 +56,14 @@ export function AlbumsTable({
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   
+  // Local state for optimistic updates
+  const [localAlbums, setLocalAlbums] = useState<Album[]>(albums);
+  
+  // Sync with parent albums
+  useEffect(() => {
+    setLocalAlbums(albums);
+  }, [albums]);
+  
   // Hover state for album events history
   const [hoveredAlbumId, setHoveredAlbumId] = useState<string | null>(null);
   const [albumEvents, setAlbumEvents] = useState<Record<string, any[]>>({});
@@ -91,6 +99,123 @@ export function AlbumsTable({
   const [clients, setClients] = useState<any[]>([]);
   const [projectDepartments, setProjectDepartments] = useState<any[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    if (!companyId || !projectId) return;
+
+    // Determine WebSocket URL based on environment
+    // For development with ngrok: use localhost:3001 directly (ngrok free tier allows only 1 tunnel)
+    // For production: use same domain with different path
+    const isDevelopment = window.location.hostname === 'localhost';
+    const isNgrok = window.location.hostname.includes('ngrok');
+    
+    let wsUrl: string;
+    if (isDevelopment) {
+      // Local development - connect directly to backend
+      wsUrl = 'ws://localhost:3001/ws';
+    } else if (isNgrok) {
+      // Using ngrok - connect to localhost backend (frontend and backend are on same machine)
+      wsUrl = 'ws://localhost:3001/ws';
+      console.log('⚠️ Using localhost WebSocket because ngrok free tier supports only 1 tunnel');
+    } else {
+      // Production or other hosting
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+    }
+    
+    console.log('🔌 Attempting to connect to WebSocket:', wsUrl);
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('✅ WebSocket connected to', wsUrl);
+      
+      // Subscribe to project updates
+      ws.send(JSON.stringify({
+        type: 'subscribe',
+        projectId: projectId,
+        companyId: companyId
+      }));
+      console.log('📡 Subscribed to project updates:', { projectId, companyId });
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('📨 WebSocket message received:', message);
+
+        if (message.type === 'album_status_updated') {
+          const { albumId, projectId: msgProjectId, data } = message;
+          
+          console.log('🔍 Status update details:', {
+            albumId,
+            msgProjectId,
+            currentProjectId: projectId,
+            match: msgProjectId.toString() === projectId.toString()
+          });
+          
+          // Only update if the update is for the current project
+          if (msgProjectId.toString() === projectId.toString()) {
+            console.log('🔄 Updating album status locally');
+            
+            // Update local album state optimistically
+            setLocalAlbums(prevAlbums => {
+              return prevAlbums.map(album => {
+                if (album.id === albumId.toString()) {
+                  // Get new status name from data
+                  const statusMap: Record<string, string> = {
+                    'waiting': 'Ожидание',
+                    'upload': 'Выгрузка',
+                    'sent': 'Отправлено',
+                    'accepted': 'Принято',
+                    'remarks': 'Замечания',
+                    'production': 'В производстве'
+                  };
+                  
+                  const newStatus = statusMap[data.statusCode] || album.status;
+                  
+                  return {
+                    ...album,
+                    status: newStatus,
+                    lastEvent: {
+                      status: newStatus,
+                      date: message.timestamp || new Date().toISOString()
+                    }
+                  };
+                }
+                return album;
+              });
+            });
+            
+            // Clear cached events for this album to force reload on hover
+            setAlbumEvents(prev => {
+              const updated = { ...prev };
+              delete updated[albumId];
+              return updated;
+            });
+          } else {
+            console.log('⏭️ Skipping update - different project');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('❌ WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('🔌 WebSocket disconnected');
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [companyId, projectId, onRetry]);
 
   // Load album events when hovering
   const loadAlbumEvents = async (albumId: string) => {
@@ -243,9 +368,9 @@ export function AlbumsTable({
     }).filter(template => template.items.length > 0); // Only show templates with matching items
   }, [albumTemplates, projectDepartments]);
 
-  // Filter albums
+  // Filter albums (use localAlbums for real-time updates)
   const filteredAlbums = useMemo(() => {
-    return albums.filter(album => {
+    return localAlbums.filter(album => {
       const matchesSearch = 
         album.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         album.code.toLowerCase().includes(searchQuery.toLowerCase());
@@ -256,7 +381,7 @@ export function AlbumsTable({
 
       return matchesSearch && matchesDepartment && matchesExecutor && matchesStatus;
     });
-  }, [albums, searchQuery, departmentFilter, executorFilter, statusFilter]);
+  }, [localAlbums, searchQuery, departmentFilter, executorFilter, statusFilter]);
 
   // Calculate summary statistics
   const summary = useMemo(() => {
@@ -312,16 +437,55 @@ export function AlbumsTable({
   // Get status badge variant and text
   const getStatusConfig = (status: string) => {
     switch (status) {
+      case 'Ожидание':
+        return { 
+          variant: 'default' as const, 
+          text: 'Ожидание', 
+          className: 'bg-slate-100 text-slate-700 border-slate-200',
+          rowBgClass: 'bg-slate-50'
+        };
+      case 'Выгрузка':
+        return { 
+          variant: 'default' as const, 
+          text: 'Выгрузка', 
+          className: 'bg-blue-100 text-blue-700 border-blue-200',
+          rowBgClass: 'bg-blue-50'
+        };
+      case 'Отправлено':
+        return { 
+          variant: 'default' as const, 
+          text: 'Отправлено', 
+          className: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+          rowBgClass: 'bg-emerald-50'
+        };
       case 'Принято':
-        return { variant: 'default' as const, text: 'Принято', className: 'bg-green-100 text-green-700 border-green-200' };
-      case 'На проверке':
-        return { variant: 'default' as const, text: 'Отправлено', className: 'bg-blue-100 text-blue-700 border-blue-200' };
+        return { 
+          variant: 'default' as const, 
+          text: 'Принято', 
+          className: 'bg-green-100 text-green-800 border-green-300',
+          rowBgClass: 'bg-green-100'
+        };
       case 'Замечания':
-        return { variant: 'destructive' as const, text: 'Замечания', className: 'bg-red-100 text-red-700 border-red-200' };
-      case 'В работе':
-        return { variant: 'default' as const, text: 'В работе', className: 'bg-gray-100 text-gray-700 border-gray-200' };
+        return { 
+          variant: 'destructive' as const, 
+          text: 'Замечания', 
+          className: 'bg-orange-100 text-orange-700 border-orange-200',
+          rowBgClass: 'bg-orange-50'
+        };
+      case 'В производстве':
+        return { 
+          variant: 'default' as const, 
+          text: 'В производстве', 
+          className: 'bg-violet-100 text-violet-700 border-violet-200',
+          rowBgClass: 'bg-violet-50'
+        };
       default:
-        return { variant: 'default' as const, text: status, className: '' };
+        return { 
+          variant: 'default' as const, 
+          text: status, 
+          className: '',
+          rowBgClass: ''
+        };
     }
   };
 
@@ -803,6 +967,21 @@ export function AlbumsTable({
                   }));
                 };
 
+                const getRowBgColor = () => {
+                  if (statusConfig.rowBgClass) {
+                    switch (album.status) {
+                      case 'Ожидание': return '#f8fafc';
+                      case 'Выгрузка': return '#eff6ff';
+                      case 'Отправлено': return '#ecfdf5';
+                      case 'Принято': return '#bbf7d0';
+                      case 'Замечания': return '#fff7ed';
+                      case 'В производстве': return '#f5f3ff';
+                      default: return '';
+                    }
+                  }
+                  return '';
+                };
+
                 return (
                   <tr
                     key={album.id}
@@ -820,10 +999,10 @@ export function AlbumsTable({
                     onMouseLeave={() => setHoveredAlbumId(null)}
                     className={`
                       border-t border-gray-100 ${!isEditMode ? 'cursor-pointer' : ''} transition-colors
-                      ${index % 2 === 0 ? 'bg-white' : 'bg-[#F1F5F9]'}
                       ${!isEditMode ? 'hover:bg-[#EFF6FF]' : ''}
                       ${isSelected && !isEditMode ? 'border-l-4 border-l-[#3B82F6]' : ''}
                     `}
+                    style={{ backgroundColor: getRowBgColor() || (index % 2 === 0 ? '#ffffff' : '#F1F5F9') }}
                   >
                     <td className="py-1 px-3 text-gray-600 text-sm">{index + 1}</td>
                     
