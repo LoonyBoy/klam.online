@@ -22,12 +22,12 @@ INSERT INTO departments (code, name, sort_order) VALUES
 -- =========================
 
 INSERT INTO album_statuses (code, name, color_hex) VALUES
-('upload', 'Загрузка', '#94a3b8'),          -- slate-400
-('sent', 'Отправлено', '#60a5fa'),          -- blue-400
-('accepted', 'Принято', '#4ade80'),         -- green-400
-('pending', 'На рассмотрении', '#fbbf24'),  -- amber-400
-('remarks', 'Замечания', '#fb923c'),        -- orange-400
-('production', 'В производстве', '#a78bfa'); -- violet-400
+('waiting', 'Ожидание', '#94a3b8'),         -- slate-400
+('upload', 'Выгрузка', '#60a5fa'),          -- blue-400
+('sent', 'Отправлено', '#3b82f6'),          -- blue-500
+('accepted', 'Принято', '#22c55e'),         -- green-500
+('remarks', 'Замечания', '#f97316'),        -- orange-500
+('production', 'В производстве', '#8b5cf6'); -- violet-500
 
 -- =========================
 -- КОНЕЦ ЗАПОЛНЕНИЯ

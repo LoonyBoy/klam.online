@@ -145,7 +145,7 @@ CREATE TABLE departments (
 
 CREATE TABLE album_statuses (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    code ENUM('upload','sent','accepted','pending','remarks','production') NOT NULL,
+    code ENUM('waiting','upload','sent','accepted','remarks','production') NOT NULL,
     name VARCHAR(255) NOT NULL,
     color_hex VARCHAR(16) NULL,
     UNIQUE KEY uq_album_statuses_code (code)

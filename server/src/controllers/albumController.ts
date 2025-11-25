@@ -903,3 +903,201 @@ export async function deleteAlbum(req: Request, res: Response): Promise<void> {
     connection.release();
   }
 }
+
+/**
+ * PUT /api/companies/:companyId/projects/:projectId/albums/:albumId/status
+ * Изменить статус альбома
+ */
+export async function updateAlbumStatus(req: Request, res: Response) {
+  const connection = await pool.getConnection();
+  const { companyId, projectId, albumId } = req.params;
+  const { statusCode, comment } = req.body;
+  const userId = (req as any).user?.id;
+
+  console.log('🔄 Update album status request:', { albumId, projectId, companyId, statusCode });
+
+  // Валидация
+  if (!statusCode) {
+    res.status(400).json({ error: 'Status code is required' });
+    return;
+  }
+
+  const validStatusCodes = ['waiting', 'upload', 'sent', 'accepted', 'remarks', 'production'];
+  if (!validStatusCodes.includes(statusCode)) {
+    res.status(400).json({ 
+      error: 'Invalid status code',
+      validCodes: validStatusCodes 
+    });
+    return;
+  }
+
+  try {
+    await connection.beginTransaction();
+
+    // Проверяем, что альбом принадлежит проекту и компании
+    const [albums] = await connection.query<RowDataPacket[]>(
+      `SELECT a.id, a.status_id, a.code, a.name
+       FROM albums a
+       JOIN projects p ON a.project_id = p.id
+       WHERE a.id = ? AND a.project_id = ? AND p.company_id = ?`,
+      [albumId, projectId, companyId]
+    );
+
+    if (albums.length === 0) {
+      await connection.rollback();
+      res.status(404).json({ error: 'Album not found' });
+      return;
+    }
+
+    const album = albums[0];
+    const oldStatusId = album.status_id;
+
+    // Получаем ID нового статуса
+    const [statuses] = await connection.query<RowDataPacket[]>(
+      'SELECT id FROM album_statuses WHERE code = ?',
+      [statusCode]
+    );
+
+    if (statuses.length === 0) {
+      await connection.rollback();
+      res.status(400).json({ error: 'Invalid status code' });
+      return;
+    }
+
+    const newStatusId = statuses[0].id;
+
+    // Проверяем, изменился ли статус
+    if (oldStatusId === newStatusId) {
+      await connection.rollback();
+      res.json({ 
+        message: 'Status is already set to this value',
+        album: {
+          id: album.id,
+          code: album.code,
+          name: album.name,
+          statusCode
+        }
+      });
+      return;
+    }
+
+    // Обновляем статус альбома
+    await connection.query(
+      `UPDATE albums 
+       SET status_id = ?, last_status_at = NOW(), updated_at = NOW() 
+       WHERE id = ?`,
+      [newStatusId, albumId]
+    );
+
+    // Записываем в историю
+    await connection.query(
+      `INSERT INTO album_status_history 
+       (album_id, old_status_id, new_status_id, changed_by_user_id, comment, created_at) 
+       VALUES (?, ?, ?, ?, ?, NOW())`,
+      [albumId, oldStatusId, newStatusId, userId || null, comment || null]
+    );
+
+    await connection.commit();
+
+    console.log(`✅ Updated album ${album.code} status from ${oldStatusId} to ${newStatusId}`);
+
+    res.json({ 
+      message: 'Album status updated successfully',
+      album: {
+        id: album.id,
+        code: album.code,
+        name: album.name,
+        oldStatusId,
+        newStatusId,
+        statusCode
+      }
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error updating album status:', error);
+    res.status(500).json({
+      error: 'Failed to update album status',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * GET /api/companies/:companyId/projects/:projectId/albums/:albumId/status-history
+ * Получить историю изменений статуса альбома
+ */
+export async function getAlbumStatusHistory(req: Request, res: Response) {
+  try {
+    const { companyId, projectId, albumId } = req.params;
+
+    console.log('📜 Get status history request:', { albumId, projectId, companyId });
+
+    // Проверяем, что альбом принадлежит проекту и компании
+    const [albums] = await pool.query<RowDataPacket[]>(
+      `SELECT a.id 
+       FROM albums a
+       JOIN projects p ON a.project_id = p.id
+       WHERE a.id = ? AND a.project_id = ? AND p.company_id = ?`,
+      [albumId, projectId, companyId]
+    );
+
+    if (albums.length === 0) {
+      res.status(404).json({ error: 'Album not found' });
+      return;
+    }
+
+    // Получаем историю изменений статусов
+    const [history] = await pool.query<RowDataPacket[]>(
+      `SELECT 
+        h.id,
+        h.created_at,
+        h.comment,
+        old_status.code as old_status_code,
+        old_status.name as old_status_name,
+        new_status.code as new_status_code,
+        new_status.name as new_status_name,
+        u.first_name as changed_by_first_name,
+        u.last_name as changed_by_last_name,
+        h.changed_by_telegram_id
+       FROM album_status_history h
+       LEFT JOIN album_statuses old_status ON h.old_status_id = old_status.id
+       JOIN album_statuses new_status ON h.new_status_id = new_status.id
+       LEFT JOIN users u ON h.changed_by_user_id = u.id
+       WHERE h.album_id = ?
+       ORDER BY h.created_at DESC`,
+      [albumId]
+    );
+
+    // Форматируем результат
+    const formattedHistory = history.map(row => ({
+      id: row.id,
+      createdAt: row.created_at,
+      comment: row.comment,
+      oldStatus: row.old_status_code ? {
+        code: row.old_status_code,
+        name: row.old_status_name
+      } : null,
+      newStatus: {
+        code: row.new_status_code,
+        name: row.new_status_name
+      },
+      changedBy: row.changed_by_first_name ? {
+        firstName: row.changed_by_first_name,
+        lastName: row.changed_by_last_name
+      } : null,
+      changedByTelegramId: row.changed_by_telegram_id
+    }));
+
+    res.json(formattedHistory);
+
+  } catch (error) {
+    console.error('Error fetching album status history:', error);
+    res.status(500).json({
+      error: 'Failed to fetch album status history',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+}

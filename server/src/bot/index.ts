@@ -1,5 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
+import { parseStatusCommands, formatStatusChangeResponse } from '../utils/statusAliases';
+import { query } from '../db';
 
 dotenv.config();
 
@@ -116,6 +118,114 @@ export function initBot() {
       }
 
       await bot?.sendMessage(chatId, message, { parse_mode: 'HTML' });
+    });
+
+    // Обработчик всех текстовых сообщений для парсинга алиасов статусов
+    bot.on('message', async (msg) => {
+      try {
+        // Пропускаем сообщения без текста или команды (начинающиеся с /)
+        if (!msg.text || msg.text.startsWith('/')) {
+          return;
+        }
+
+        // Парсим сообщение на наличие команд смены статуса
+        const commands = parseStatusCommands(msg.text);
+        
+        if (commands.length === 0) {
+          return; // Нет команд смены статуса
+        }
+
+        console.log(`📋 Detected ${commands.length} status change command(s) in chat ${msg.chat.id}`);
+
+        // Обрабатываем каждую команду
+        for (const command of commands) {
+          try {
+            // Находим проект по chat_id через project_channels
+            const [projects] = await query<any[]>(
+              `SELECT p.id, p.code, p.name 
+               FROM projects p
+               JOIN project_channels pc ON p.id = pc.project_id
+               WHERE pc.telegram_chat_id = ?`,
+              [msg.chat.id.toString()]
+            );
+
+            if (!projects || projects.length === 0) {
+              console.log(`⚠️ No project found for chat ${msg.chat.id}`);
+              continue;
+            }
+
+            const project = projects[0];
+
+            // Находим альбом по коду в проекте
+            const [albums] = await query<any[]>(
+              `SELECT a.id, a.status_id, a.code, a.name 
+               FROM albums a 
+               WHERE a.project_id = ? AND a.code = ?`,
+              [project.id, command.albumCode]
+            );
+
+            if (!albums || albums.length === 0) {
+              await bot?.sendMessage(
+                msg.chat.id,
+                `⚠️ Альбом ${command.albumCode} не найден в проекте "${project.name}"`,
+                { reply_to_message_id: msg.message_id }
+              );
+              continue;
+            }
+
+            const album = albums[0];
+            const oldStatusId = album.status_id;
+
+            // Получаем ID нового статуса
+            const [statuses] = await query<any[]>(
+              'SELECT id FROM album_statuses WHERE code = ?',
+              [command.statusCode]
+            );
+
+            if (!statuses || statuses.length === 0) {
+              console.error(`❌ Status code ${command.statusCode} not found`);
+              continue;
+            }
+
+            const newStatusId = statuses[0].id;
+
+            // Обновляем статус альбома
+            await query(
+              `UPDATE albums 
+               SET status_id = ?, last_status_at = NOW(), updated_at = NOW() 
+               WHERE id = ?`,
+              [newStatusId, album.id]
+            );
+
+            // Записываем в историю
+            await query(
+              `INSERT INTO album_status_history 
+               (album_id, old_status_id, new_status_id, changed_by_telegram_id, created_at) 
+               VALUES (?, ?, ?, ?, NOW())`,
+              [album.id, oldStatusId, newStatusId, msg.from?.id || null]
+            );
+
+            // Отправляем подтверждение
+            const response = formatStatusChangeResponse(command.albumCode, command.statusCode, true);
+            await bot?.sendMessage(msg.chat.id, response, {
+              reply_to_message_id: msg.message_id,
+            });
+
+            console.log(`✅ Updated album ${command.albumCode} status to ${command.statusCode}`);
+
+          } catch (error) {
+            console.error(`❌ Error processing command for ${command.albumCode}:`, error);
+            await bot?.sendMessage(
+              msg.chat.id,
+              formatStatusChangeResponse(command.albumCode, command.statusCode, false),
+              { reply_to_message_id: msg.message_id }
+            );
+          }
+        }
+
+      } catch (error) {
+        console.error('❌ Error handling message:', error);
+      }
     });
 
     // Обработчик ошибок polling

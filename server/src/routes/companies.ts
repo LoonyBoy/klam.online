@@ -48,6 +48,12 @@ router.put('/:companyId/projects/:projectId/albums/:albumId', authenticateToken,
 // Удалить альбом из проекта (требует аутентификацию)
 router.delete('/:companyId/projects/:projectId/albums/:albumId', authenticateToken, albumController.deleteAlbum);
 
+// Изменить статус альбома (требует аутентификацию)
+router.put('/:companyId/projects/:projectId/albums/:albumId/status', authenticateToken, albumController.updateAlbumStatus);
+
+// Получить историю изменений статуса альбома (требует аутентификацию)
+router.get('/:companyId/projects/:projectId/albums/:albumId/status-history', authenticateToken, albumController.getAlbumStatusHistory);
+
 // Создать новый проект (требует аутентификацию)
 router.post('/:companyId/projects', authenticateToken, projectController.createProject);
 
