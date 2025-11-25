@@ -56,6 +56,10 @@ export function AlbumsTable({
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   
+  // Hover state for album events history
+  const [hoveredAlbumId, setHoveredAlbumId] = useState<string | null>(null);
+  const [albumEvents, setAlbumEvents] = useState<Record<string, any[]>>({});
+  
   // Delete album state
   const [albumToDelete, setAlbumToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -87,6 +91,20 @@ export function AlbumsTable({
   const [clients, setClients] = useState<any[]>([]);
   const [projectDepartments, setProjectDepartments] = useState<any[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
+
+  // Load album events when hovering
+  const loadAlbumEvents = async (albumId: string) => {
+    if (albumEvents[albumId] || !companyId || !projectId) return;
+    
+    try {
+      const response = await companyApi.getAlbumEvents(companyId, projectId, albumId);
+      if (response.success && response.events) {
+        setAlbumEvents(prev => ({ ...prev, [albumId]: response.events }));
+      }
+    } catch (error) {
+      console.error('Failed to load album events:', error);
+    }
+  };
 
   // Load templates from API
   useEffect(() => {
@@ -748,8 +766,8 @@ export function AlbumsTable({
       </div>
 
       {/* Table */}
-      <div className={`rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm transition-all ${isExpanded ? 'max-h-none' : 'max-h-[600px]'}`}>
-        <div className="overflow-x-auto overflow-y-auto max-h-full">
+      <div className={`rounded-lg border border-gray-200 bg-white shadow-sm transition-all ${isExpanded ? 'max-h-none' : 'max-h-[600px]'}`}>
+        <div className="overflow-x-auto overflow-y-auto max-h-full" style={{ overflow: 'visible' }}>
           <table className="w-full" style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', tableLayout: 'fixed' }}>
             <thead className="sticky top-0 bg-[#E2E8F0]">
               <tr>
@@ -788,12 +806,18 @@ export function AlbumsTable({
                 return (
                   <tr
                     key={album.id}
+                    data-album-id={album.id}
                     onClick={() => {
                       if (!isEditMode) {
                         setSelectedRow(album.id);
                         onAlbumClick(album.id);
                       }
                     }}
+                    onMouseEnter={() => {
+                      setHoveredAlbumId(album.id);
+                      loadAlbumEvents(album.id);
+                    }}
+                    onMouseLeave={() => setHoveredAlbumId(null)}
                     className={`
                       border-t border-gray-100 ${!isEditMode ? 'cursor-pointer' : ''} transition-colors
                       ${index % 2 === 0 ? 'bg-white' : 'bg-[#F1F5F9]'}
@@ -956,15 +980,36 @@ export function AlbumsTable({
                     </td>
                     
                     {/* Последнее событие */}
-                    <td className="py-1 px-3">
-                      {album.lastEvent && album.lastEvent.status ? (
-                        <div className="space-y-1">
-                          <span className="text-gray-700 text-xs">{album.lastEvent.status}</span>
-                          <p className="text-xs text-gray-500">{formatDateTime(album.lastEvent.date)}</p>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 text-xs">—</span>
-                      )}
+                    <td className="py-1 px-3" style={{ minWidth: '150px' }}>
+                      <div className="relative inline-block w-full">
+                        {album.lastEvent && album.lastEvent.status ? (
+                          <>
+                            <div className="space-y-1">
+                              <span className="text-gray-700 text-xs font-medium">{album.lastEvent.status}</span>
+                              <p className="text-xs text-gray-500">{formatDateTime(album.lastEvent.date)}</p>
+                            </div>
+                            
+                            {/* История при наведении */}
+                            {hoveredAlbumId === album.id && albumEvents[album.id] && albumEvents[album.id].length > 1 && (
+                              <div className="absolute left-0 top-full mt-2 bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-lg shadow-xl p-2.5 w-64 max-h-64 overflow-y-auto backdrop-blur-sm" style={{ zIndex: 9999 }}>
+                                <div className="space-y-2">
+                                  {albumEvents[album.id].slice(1).map((event: any, idx: number) => (
+                                    <div key={idx} className="flex items-start gap-2 p-2 rounded-md hover:bg-white/50 transition-colors">
+                                      <div className="flex-shrink-0 w-1.5 h-1.5 mt-1.5 rounded-full bg-gray-400"></div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-medium text-gray-700">{event.statusName || event.status}</div>
+                                        <div className="text-[11px] text-gray-500 mt-0.5">{formatDateTime(event.createdAt || event.created_at || event.date)}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </div>
                     </td>
                     
                     {/* Ссылки */}

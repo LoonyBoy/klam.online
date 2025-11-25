@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { pool } from '../db';
 import { RowDataPacket } from 'mysql2';
+import { parseTelegramChannel } from '../utils/telegramChannelParser';
 
 /**
  * GET /api/companies/:companyId/projects
@@ -296,12 +297,22 @@ export async function createProject(req: Request, res: Response) {
 
     // 4. Сохраняем информацию о Telegram канале
     if (channelUrl) {
+      // Парсим введенные данные (может быть Chat ID или ссылка)
+      const channelInfo = parseTelegramChannel(channelUrl);
+      
+      console.log(`📱 Parsed Telegram channel:`, channelInfo);
+      
       await connection.query(
-        `INSERT INTO project_channels (project_id, invite_link, added_by)
-         VALUES (?, ?, ?)`,
-        [projectId, channelUrl, userId]
+        `INSERT INTO project_channels (project_id, telegram_chat_id, invite_link, added_by)
+         VALUES (?, ?, ?, ?)`,
+        [projectId, channelInfo.chatId, channelInfo.inviteLink, userId]
       );
-      console.log(`✅ Saved Telegram channel URL`);
+      
+      if (channelInfo.chatId) {
+        console.log(`✅ Saved Telegram channel with Chat ID: ${channelInfo.chatId}`);
+      } else if (channelInfo.inviteLink) {
+        console.log(`✅ Saved Telegram channel invite link: ${channelInfo.inviteLink}`);
+      }
     }
 
     // Коммитим транзакцию

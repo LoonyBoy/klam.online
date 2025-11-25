@@ -1101,3 +1101,78 @@ export async function getAlbumStatusHistory(req: Request, res: Response) {
     });
   }
 }
+
+/**
+ * GET /api/companies/:companyId/projects/:projectId/albums/:albumId/events
+ * Получить историю событий альбома из таблицы album_events
+ */
+export async function getAlbumEvents(req: Request, res: Response) {
+  try {
+    const { companyId, projectId, albumId } = req.params;
+
+    // Проверяем доступ к проекту
+    const [projects] = await pool.query<RowDataPacket[]>(
+      `SELECT id FROM projects WHERE id = ? AND company_id = ?`,
+      [projectId, companyId]
+    );
+
+    if (projects.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Получаем события альбома
+    const [events] = await pool.query<RowDataPacket[]>(
+      `SELECT 
+        ae.id,
+        ae.album_id,
+        ae.status_id,
+        ast.code as statusCode,
+        ast.name as statusName,
+        ae.comment,
+        ae.created_by_user_id,
+        ae.created_by_participant_id,
+        ae.created_at,
+        ae.source,
+        ae.telegram_message_id,
+        u.first_name as user_first_name,
+        u.last_name as user_last_name,
+        p.first_name as participant_first_name,
+        p.last_name as participant_last_name
+      FROM album_events ae
+      LEFT JOIN album_statuses ast ON ae.status_id = ast.id
+      LEFT JOIN users u ON ae.created_by_user_id = u.id
+      LEFT JOIN participants p ON ae.created_by_participant_id = p.id
+      WHERE ae.album_id = ?
+      ORDER BY ae.created_at DESC
+      LIMIT 20`,
+      [albumId]
+    );
+
+    const formattedEvents = events.map(event => ({
+      id: event.id,
+      albumId: event.album_id,
+      statusId: event.status_id,
+      statusCode: event.statusCode,
+      statusName: event.statusName,
+      comment: event.comment,
+      createdAt: event.created_at,
+      source: event.source,
+      telegramMessageId: event.telegram_message_id,
+      createdBy: event.user_first_name 
+        ? `${event.user_first_name} ${event.user_last_name || ''}`.trim()
+        : event.participant_first_name 
+        ? `${event.participant_first_name} ${event.participant_last_name || ''}`.trim()
+        : null
+    }));
+
+    res.json({ success: true, events: formattedEvents });
+
+  } catch (error) {
+    console.error('Error fetching album events:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch album events',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+}

@@ -48,6 +48,9 @@ router.put('/:companyId/projects/:projectId/albums/:albumId', authenticateToken,
 // Удалить альбом из проекта (требует аутентификацию)
 router.delete('/:companyId/projects/:projectId/albums/:albumId', authenticateToken, albumController.deleteAlbum);
 
+// Получить историю событий альбома (требует аутентификацию)
+router.get('/:companyId/projects/:projectId/albums/:albumId/events', authenticateToken, albumController.getAlbumEvents);
+
 // Изменить статус альбома (требует аутентификацию)
 router.put('/:companyId/projects/:projectId/albums/:albumId/status', authenticateToken, albumController.updateAlbumStatus);
 

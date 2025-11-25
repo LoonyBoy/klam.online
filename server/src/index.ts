@@ -16,6 +16,8 @@ import dictionaryRoutes from './routes/dictionaries';
 import telegramRoutes from './routes/telegram';
 import userRoutes from './routes/user';
 import { initBot, stopBot } from './bot';
+import { wsManager } from './websocket';
+import { createServer } from 'http';
 
 // Load environment variables
 dotenv.config();
@@ -141,12 +143,17 @@ async function startServer() {
       process.exit(1);
     }
 
+    // Create HTTP server and initialize WebSocket
+    const httpServer = createServer(app);
+    wsManager.initialize(httpServer);
+
     // Start server
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log('');
       console.log('🚀 KLAM.Online Server');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log(`📍 Server running on: http://localhost:${PORT}`);
+      console.log(`🔌 WebSocket available on: ws://localhost:${PORT}/ws`);
       console.log(`🌍 Environment: ${NODE_ENV}`);
       console.log(`✓ Database: Connected`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

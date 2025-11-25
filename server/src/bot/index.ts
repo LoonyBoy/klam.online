@@ -1,7 +1,8 @@
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
-import { parseStatusCommands, formatStatusChangeResponse } from '../utils/statusAliases';
+import { parseStatusCommands, formatStatusChangeResponse, getReactionEmojiForStatus } from '../utils/statusAliases';
 import { query } from '../db';
+import { wsManager } from '../websocket';
 
 dotenv.config();
 
@@ -128,10 +129,15 @@ export function initBot() {
           return;
         }
 
+        console.log(`📩 Received message: "${msg.text}" from chat ${msg.chat.id}`);
+
         // Парсим сообщение на наличие команд смены статуса
         const commands = parseStatusCommands(msg.text);
         
+        console.log(`🔍 Parsed commands:`, commands);
+        
         if (commands.length === 0) {
+          console.log(`⚠️ No status commands found in message`);
           return; // Нет команд смены статуса
         }
 
@@ -141,7 +147,7 @@ export function initBot() {
         for (const command of commands) {
           try {
             // Находим проект по chat_id через project_channels
-            const [projects] = await query<any[]>(
+            const projects = await query<any[]>(
               `SELECT p.id, p.code, p.name 
                FROM projects p
                JOIN project_channels pc ON p.id = pc.project_id
@@ -149,15 +155,23 @@ export function initBot() {
               [msg.chat.id.toString()]
             );
 
+            console.log(`🔍 Found projects:`, projects);
+
             if (!projects || projects.length === 0) {
               console.log(`⚠️ No project found for chat ${msg.chat.id}`);
               continue;
             }
 
             const project = projects[0];
+            console.log(`📁 Using project:`, project);
+
+            if (!project || !project.id) {
+              console.error(`❌ Project data is invalid:`, project);
+              continue;
+            }
 
             // Находим альбом по коду в проекте
-            const [albums] = await query<any[]>(
+            const albums = await query<any[]>(
               `SELECT a.id, a.status_id, a.code, a.name 
                FROM albums a 
                WHERE a.project_id = ? AND a.code = ?`,
@@ -177,7 +191,7 @@ export function initBot() {
             const oldStatusId = album.status_id;
 
             // Получаем ID нового статуса
-            const [statuses] = await query<any[]>(
+            const statuses = await query<any[]>(
               'SELECT id FROM album_statuses WHERE code = ?',
               [command.statusCode]
             );
@@ -197,19 +211,47 @@ export function initBot() {
               [newStatusId, album.id]
             );
 
-            // Записываем в историю
+            // Записываем событие в album_events
             await query(
-              `INSERT INTO album_status_history 
-               (album_id, old_status_id, new_status_id, changed_by_telegram_id, created_at) 
-               VALUES (?, ?, ?, ?, NOW())`,
-              [album.id, oldStatusId, newStatusId, msg.from?.id || null]
+              `INSERT INTO album_events 
+               (album_id, status_id, created_at, source, telegram_message_id) 
+               VALUES (?, ?, NOW(), 'telegram', ?)`,
+              [
+                album.id, 
+                newStatusId, 
+                msg.message_id
+              ]
             );
 
-            // Отправляем подтверждение
-            const response = formatStatusChangeResponse(command.albumCode, command.statusCode, true);
-            await bot?.sendMessage(msg.chat.id, response, {
-              reply_to_message_id: msg.message_id,
+            // Отправляем обновление в реальном времени через WebSocket
+            wsManager.broadcastAlbumStatusUpdate(album.id, project.id, project.company_id || 0, {
+              albumCode: command.albumCode,
+              albumName: album.name,
+              oldStatusId,
+              newStatusId,
+              statusCode: command.statusCode,
             });
+
+            // Ставим реакцию на сообщение (если не получается - отправляем текст)
+            try {
+              const reactionEmoji = getReactionEmojiForStatus(command.statusCode) as any;
+              await bot?.setMessageReaction(msg.chat.id, msg.message_id, {
+                reaction: [{ type: 'emoji', emoji: reactionEmoji }],
+                is_big: false
+              });
+              console.log(`✅ Set reaction ${reactionEmoji} for album ${command.albumCode}`);
+            } catch (reactionError) {
+              // Если не удалось поставить реакцию (например, в приватном канале),
+              // отправляем короткое текстовое подтверждение
+              const response = formatStatusChangeResponse(command.albumCode, command.statusCode, true);
+              try {
+                await bot?.sendMessage(msg.chat.id, response, {
+                  reply_to_message_id: msg.message_id,
+                });
+              } catch (sendError) {
+                await bot?.sendMessage(msg.chat.id, response);
+              }
+            }
 
             console.log(`✅ Updated album ${command.albumCode} status to ${command.statusCode}`);
 

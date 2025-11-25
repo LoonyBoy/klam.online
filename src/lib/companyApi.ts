@@ -280,6 +280,24 @@ export const companyApi = {
     return data;
   },
 
+  // Получить историю событий альбома
+  async getAlbumEvents(companyId: string, projectId: string, albumId: string): Promise<{ success: boolean; events: any[] }> {
+    const response = await fetch(
+      `/api/companies/${companyId}/projects/${projectId}/albums/${albumId}/events`,
+      {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      }
+    );
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'Failed to fetch album events');
+    }
+    
+    return response.json();
+  },
+
   // Обновить альбом
   async updateAlbum(companyId: string, projectId: string, albumId: string, albumData: {
     name?: string;
