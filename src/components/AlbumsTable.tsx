@@ -105,23 +105,21 @@ export function AlbumsTable({
     if (!companyId || !projectId) return;
 
     // Determine WebSocket URL based on environment
-    // For development with ngrok: use localhost:3001 directly (ngrok free tier allows only 1 tunnel)
-    // For production: use same domain with different path
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     const isDevelopment = window.location.hostname === 'localhost';
-    const isNgrok = window.location.hostname.includes('ngrok');
     
     let wsUrl: string;
     if (isDevelopment) {
       // Local development - connect directly to backend
       wsUrl = 'ws://localhost:3001/ws';
-    } else if (isNgrok) {
-      // Using ngrok - connect to localhost backend (frontend and backend are on same machine)
-      wsUrl = 'ws://localhost:3001/ws';
-      console.log('⚠️ Using localhost WebSocket because ngrok free tier supports only 1 tunnel');
+    } else if (API_URL.includes('https://api.klambot.ru')) {
+      // Production - use WSS to API domain
+      wsUrl = 'wss://api.klambot.ru/ws';
     } else {
-      // Production or other hosting
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+      // Other environments - derive from API_URL
+      const wsProtocol = API_URL.startsWith('https') ? 'wss:' : 'ws:';
+      const apiHost = new URL(API_URL).host;
+      wsUrl = `${wsProtocol}//${apiHost}/ws`;
     }
     
     console.log('🔌 Attempting to connect to WebSocket:', wsUrl);

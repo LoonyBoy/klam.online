@@ -1,5 +1,8 @@
 // Типы для работы с компаниями и приглашениями
 
+// API Base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || '${API_BASE_URL}';
+
 export interface Company {
   id: string;
   name: string;
@@ -545,7 +548,7 @@ export const companyApi = {
   async getCompanyParticipants(companyId: string): Promise<any> {
     console.log('📤 Fetching participants for company:', companyId);
     
-    const response = await fetch(`http://localhost:3001/api/companies/${companyId}/participants`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/participants`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -565,7 +568,7 @@ export const companyApi = {
   async deleteParticipant(companyId: string, participantId: string) {
     console.log('🗑️ Deleting participant:', participantId);
     
-    const response = await fetch(`http://localhost:3001/api/companies/${companyId}/participants/${participantId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/participants/${participantId}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
@@ -583,7 +586,7 @@ export const companyApi = {
   async deleteProject(companyId: string, projectId: string) {
     console.log('🗑️ Deleting project:', projectId);
     
-    const response = await fetch(`http://localhost:3001/api/companies/${companyId}/projects/${projectId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
@@ -601,7 +604,7 @@ export const companyApi = {
   async deleteAlbum(companyId: string, projectId: string, albumId: string) {
     console.log('🗑️ Deleting album:', albumId);
     
-    const response = await fetch(`http://localhost:3001/api/companies/${companyId}/projects/${projectId}/albums/${albumId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}/albums/${albumId}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
@@ -620,7 +623,7 @@ export const companyApi = {
  * Получить список пользователей компании
  */
 export async function getCompanyUsers(companyId: string) {
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/users`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/users`, {
     headers: getAuthHeaders()
   });
   
@@ -635,7 +638,7 @@ export async function getCompanyUsers(companyId: string) {
  * Получить статистику по пользователям компании
  */
 export async function getCompanyUsersStats(companyId: string) {
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/users/stats`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/users/stats`, {
     headers: getAuthHeaders()
   });
   
@@ -659,7 +662,7 @@ export async function addParticipant(companyId: string, data: {
 }) {
   console.log('📤 Adding participant:', data);
   
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/participants`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/participants`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(data)
@@ -705,7 +708,7 @@ export async function getFilteredEvents(companyId: string, filters?: {
   if (filters?.statusId) params.append('statusId', filters.statusId);
   if (filters?.userId) params.append('userId', filters.userId);
 
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/reports/events?${params}`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/reports/events?${params}`, {
     headers: getAuthHeaders()
   });
   
@@ -729,7 +732,7 @@ export async function updateParticipant(companyId: string, participantId: string
 }) {
   console.log('📝 Updating participant:', participantId, data);
   
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/participants/${participantId}`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/participants/${participantId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data)
@@ -746,7 +749,7 @@ export async function updateParticipant(companyId: string, participantId: string
 
 // Get user profile
 export async function getUserProfile(companyId: string): Promise<any> {
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/settings/profile`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/settings/profile`, {
     headers: getAuthHeaders()
   });
   
@@ -759,7 +762,7 @@ export async function getUserProfile(companyId: string): Promise<any> {
 
 // Update user profile
 export async function updateUserProfile(companyId: string, data: { first_name: string; last_name: string; email: string }): Promise<any> {
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/settings/profile`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/settings/profile`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data)
@@ -775,7 +778,7 @@ export async function updateUserProfile(companyId: string, data: { first_name: s
 
 // Get company settings
 export async function getCompanySettings(companyId: string): Promise<any> {
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/settings`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/settings`, {
     headers: getAuthHeaders()
   });
   
@@ -792,7 +795,7 @@ export async function updateCompanySettings(companyId: string, data: {
   email: string;
   address: string;
 }): Promise<any> {
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/settings`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/settings`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data)
@@ -828,7 +831,7 @@ export async function createProject(companyId: string, projectData: {
 }): Promise<any> {
   console.log('🚀 Отправка запроса на создание проекта:', projectData);
   
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/projects`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(projectData)
@@ -845,7 +848,7 @@ export async function createProject(companyId: string, projectData: {
 
 // Check Telegram channel
 export async function checkTelegramChannel(channelUrl: string): Promise<any> {
-  const response = await fetch(`http://localhost:3001/api/telegram/check-channel`, {
+  const response = await fetch(`${API_BASE_URL}/api/telegram/check-channel`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify({ channelUrl })
@@ -878,7 +881,7 @@ export async function createParticipant(companyId: string, participantData: {
   roleType: 'executor' | 'customer';
   departmentCode: string; // Код отдела вместо ID
 }): Promise<{ success: boolean; participantId: number }> {
-  const response = await fetch(`http://localhost:3001/api/companies/${companyId}/participants`, {
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/participants`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(participantData)
