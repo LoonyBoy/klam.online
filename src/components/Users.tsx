@@ -724,7 +724,10 @@ export function Users() {
           <CardTitle className="text-lg">Список пользователей</CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          {users.length === 0 ? (
+          {/* Фильтруем пользователей - показываем только участников (member), без админов и владельцев */}
+          {(() => {
+            const memberUsers = users.filter(u => u.roleInCompany === 'member');
+            return memberUsers.length === 0 ? (
             <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
               <UsersIcon className="w-16 h-16 mx-auto mb-4 text-gray-400" />
               <p className="text-gray-600 mb-1">Пользователи не добавлены</p>
@@ -734,7 +737,7 @@ export function Users() {
             <>
               {/* Мобильное представление - карточки */}
               <div className="md:hidden space-y-3">
-                {users.map((user) => (
+                {memberUsers.map((user) => (
                   <div key={user.id} className="p-4 rounded-lg border-2 border-gray-200 bg-white">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3 flex-1">
@@ -905,7 +908,7 @@ export function Users() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map((user) => (
+                    {memberUsers.map((user) => (
                       <tr key={user.id} className="border-b border-gray-100 hover:bg-blue-50/50 transition-colors group">
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
@@ -1056,7 +1059,8 @@ export function Users() {
                 </table>
               </div>
             </>
-          )}
+          );
+          })()}
         </CardContent>
       </Card>
     </div>

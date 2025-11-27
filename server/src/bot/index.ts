@@ -173,7 +173,7 @@ export function initBot() {
 
             // Находим альбом по коду в проекте
             const albums = await query<any[]>(
-              `SELECT a.id, a.status_id, a.code, a.name 
+              `SELECT a.id, a.status_id, a.code, a.name, a.customer_id, a.link 
                FROM albums a 
                WHERE a.project_id = ? AND a.code = ?`,
               [project.id, command.albumCode]
@@ -190,6 +190,7 @@ export function initBot() {
 
             const album = albums[0];
             const oldStatusId = album.status_id;
+            console.log('📀 Album data:', JSON.stringify(album, null, 2));
 
             // Получаем ID нового статуса
             const statuses = await query<any[]>(
@@ -234,24 +235,24 @@ export function initBot() {
             });
 
             // Если статус изменен на "Отправлено" (sent), отправляем email заказчику
-            if (command.statusCode === 'sent' && album.link) {
+            if (command.statusCode === 'sent') {
               try {
-                // Получаем информацию о заказчике
+                // Получаем информацию о заказчике альбома напрямую из participants
                 const customers = await query<any>(
-                  `SELECT u.email, u.first_name, u.last_name
+                  `SELECT p.email, p.first_name, p.last_name
                    FROM participants p
-                   JOIN users u ON p.user_id = u.id
-                   WHERE p.project_id = ? AND p.role = 'customer'
-                   LIMIT 1`,
-                  [project.id]
+                   WHERE p.id = ?`,
+                  [album.customer_id]
                 );
+
+                console.log('📧 Customer data:', customers);
 
                 if (customers && customers.length > 0 && customers[0].email) {
                   const customer = customers[0];
                   await emailService.sendAlbumSentNotification({
                     albumCode: command.albumCode,
                     albumName: album.name,
-                    albumLink: album.link,
+                    albumLink: album.link || '',
                     projectName: project.name,
                     companyName: 'KlamBot.ru', // TODO: Get from company table
                     customerEmail: customer.email,
@@ -260,6 +261,7 @@ export function initBot() {
                   console.log(`📧 Email notification sent to ${customer.email}`);
                 } else {
                   console.log('⚠️ Customer email not found, skipping email notification');
+                  console.log('📧 Album customer_id:', album.customer_id);
                 }
               } catch (emailError) {
                 console.error('❌ Failed to send email notification:', emailError);
