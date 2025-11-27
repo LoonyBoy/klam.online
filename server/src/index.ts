@@ -36,8 +36,9 @@ app.use(helmet());
 // CORS - разрешаем несколько origins
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://waldo-gamic-clark.ngrok-free.dev'
-];
+  'https://waldo-gamic-clark.ngrok-free.dev',
+  process.env.CORS_ORIGIN || 'http://localhost:5173'
+].filter(Boolean);
 
 app.use(
   cors({
@@ -49,6 +50,7 @@ app.use(
         callback(null, true);
       } else {
         console.warn('⚠️ CORS blocked origin:', origin);
+        console.log('Allowed origins:', allowedOrigins);
         callback(new Error('Not allowed by CORS'));
       }
     },
