@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { pool } from '../db';
 import { RowDataPacket } from 'mysql2';
+import { emailService } from '../services/emailService';
 
 /**
  * GET /api/companies/:companyId/albums/statistics
@@ -1000,6 +1001,48 @@ export async function updateAlbumStatus(req: Request, res: Response) {
     await connection.commit();
 
     console.log(`✅ Updated album ${album.code} status from ${oldStatusId} to ${newStatusId}`);
+
+    // Если статус изменился на "отправлено" - отправляем email заказчику
+    if (statusCode === 'sent') {
+      try {
+        // Получаем данные для отправки email
+        const [albumDetails] = await connection.query<RowDataPacket[]>(
+          `SELECT 
+            a.code as albumCode,
+            a.name as albumName,
+            a.link as albumLink,
+            p.name as projectName,
+            c.name as companyName,
+            customer.email as customerEmail,
+            CONCAT(customer.first_name, ' ', COALESCE(customer.last_name, '')) as customerName
+           FROM albums a
+           JOIN projects p ON a.project_id = p.id
+           JOIN companies c ON p.company_id = c.id
+           LEFT JOIN participants customer ON a.customer_id = customer.id
+           WHERE a.id = ?`,
+          [albumId]
+        );
+
+        if (albumDetails.length > 0 && albumDetails[0].customerEmail) {
+          const details = albumDetails[0];
+          await emailService.sendAlbumSentNotification({
+            albumCode: details.albumCode,
+            albumName: details.albumName,
+            albumLink: details.albumLink,
+            projectName: details.projectName,
+            companyName: details.companyName,
+            customerEmail: details.customerEmail,
+            customerName: details.customerName
+          });
+          console.log(`📧 Email sent to customer: ${details.customerEmail}`);
+        } else {
+          console.warn('⚠️ Customer email not found, skipping notification');
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to send email notification:', emailError);
+        // Не возвращаем ошибку клиенту, так как статус уже обновлен
+      }
+    }
 
     res.json({ 
       message: 'Album status updated successfully',

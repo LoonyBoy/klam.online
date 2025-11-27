@@ -286,7 +286,7 @@ export const companyApi = {
   // Получить историю событий альбома
   async getAlbumEvents(companyId: string, projectId: string, albumId: string): Promise<{ success: boolean; events: any[] }> {
     const response = await fetch(
-      `/api/companies/${companyId}/projects/${projectId}/albums/${albumId}/events`,
+      `${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}/albums/${albumId}/events`,
       {
         method: 'GET',
         headers: getAuthHeaders(),
