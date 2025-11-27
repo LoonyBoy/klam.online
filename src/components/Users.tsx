@@ -665,7 +665,7 @@ export function Users() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="executor">Исполнитель</SelectItem>
-                                  <SelectItem value="client">Заказчик</SelectItem>
+                                  <SelectItem value="customer">Заказчик</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -847,7 +847,7 @@ export function Users() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="executor">Исполнитель</SelectItem>
-                                      <SelectItem value="client">Заказчик</SelectItem>
+                                      <SelectItem value="customer">Заказчик</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </div>

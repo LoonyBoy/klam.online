@@ -6,6 +6,9 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Building2, Users, AlertCircle, Loader2 } from 'lucide-react';
 import { TelegramLoginButton } from './TelegramLoginButton';
 
+// API Base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 interface InvitationInfo {
   companyName: string;
   role: 'admin' | 'member';
@@ -33,7 +36,7 @@ export function InvitePage() {
 
   const checkInvitationToken = async (inviteToken: string) => {
     try {
-      const response = await fetch(`/api/companies/invitations/${inviteToken}/info`, {
+      const response = await fetch(`${API_BASE_URL}/api/companies/invitations/${inviteToken}/info`, {
         headers: {
           'ngrok-skip-browser-warning': 'true'
         }

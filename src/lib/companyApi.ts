@@ -70,7 +70,7 @@ export const companyApi = {
     if (params.email) queryParams.append('email', params.email);
     if (params.telegramUsername) queryParams.append('telegramUsername', params.telegramUsername);
     
-    const response = await fetch(`/api/companies/invitations?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/invitations?${queryParams}`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -89,7 +89,7 @@ export const companyApi = {
   async acceptInvitation(invitationId: string): Promise<{ companyId: string; success: boolean }> {
     console.log('📤 Accepting invitation:', invitationId);
     
-    const response = await fetch(`/api/companies/invitations/${invitationId}/accept`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/invitations/${invitationId}/accept`, {
       method: 'POST',
       headers: getAuthHeaders()
     });
@@ -107,7 +107,7 @@ export const companyApi = {
   async declineInvitation(invitationId: string): Promise<{ success: boolean }> {
     console.log('📤 Declining invitation:', invitationId);
     
-    const response = await fetch(`/api/companies/invitations/${invitationId}/decline`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/invitations/${invitationId}/decline`, {
       method: 'POST',
       headers: getAuthHeaders()
     });
@@ -125,7 +125,7 @@ export const companyApi = {
   async createCompany(data: { name: string; description?: string }): Promise<{ success: boolean; companyId: string; company: Company }> {
     console.log('📤 Creating company:', data);
     
-    const response = await fetch('/api/companies', {
+    const response = await fetch(`${API_BASE_URL}/api/companies`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(data)
@@ -144,7 +144,7 @@ export const companyApi = {
   async getCompany(companyId: string): Promise<any> {
     console.log('📤 Fetching company:', companyId);
     
-    const response = await fetch(`/api/companies/${companyId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -162,7 +162,7 @@ export const companyApi = {
   async getCompanyProjects(companyId: string): Promise<any> {
     console.log('📤 Fetching company projects:', companyId);
     
-    const response = await fetch(`/api/companies/${companyId}/projects`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -180,7 +180,7 @@ export const companyApi = {
   async getProjectDetails(companyId: string, projectId: string): Promise<any> {
     console.log('📤 Fetching project details:', { companyId, projectId });
     
-    const response = await fetch(`/api/companies/${companyId}/projects/${projectId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -198,7 +198,7 @@ export const companyApi = {
   async updateProjectStatus(companyId: string, projectId: string, status: 'active' | 'pause' | 'archive'): Promise<any> {
     console.log('📤 Updating project status:', { companyId, projectId, status });
     
-    const response = await fetch(`/api/companies/${companyId}/projects/${projectId}/status`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}/status`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify({ status })
@@ -217,7 +217,7 @@ export const companyApi = {
   async getAlbumTemplates(companyId: string): Promise<any> {
     console.log('📤 Fetching album templates for company:', companyId);
     
-    const response = await fetch(`/api/companies/${companyId}/album-templates`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/album-templates`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -236,8 +236,8 @@ export const companyApi = {
     console.log('📤 Fetching project albums:', { companyId, projectId, category });
     
     const url = category 
-      ? `/api/companies/${companyId}/projects/${projectId}/albums?category=${encodeURIComponent(category)}`
-      : `/api/companies/${companyId}/projects/${projectId}/albums`;
+      ? `${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}/albums?category=${encodeURIComponent(category)}`
+      : `${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}/albums`;
     
     const response = await fetch(url, {
       method: 'GET',
@@ -267,7 +267,7 @@ export const companyApi = {
   }): Promise<any> {
     console.log('📤 Creating album:', { companyId, projectId, albumData });
     
-    const response = await fetch(`/api/companies/${companyId}/projects/${projectId}/albums`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}/albums`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(albumData)
@@ -314,7 +314,7 @@ export const companyApi = {
   }): Promise<any> {
     console.log('📤 Updating album:', { companyId, projectId, albumId, albumData });
     
-    const response = await fetch(`/api/companies/${companyId}/projects/${projectId}/albums/${albumId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}/albums/${albumId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(albumData)
@@ -334,7 +334,7 @@ export const companyApi = {
   async getAlbumsStatistics(companyId: string): Promise<{ activeRemarks: number }> {
     console.log('📤 Fetching albums statistics:', companyId);
     
-    const response = await fetch(`/api/companies/${companyId}/albums/statistics`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/albums/statistics`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -352,7 +352,7 @@ export const companyApi = {
   async getUpcomingDeadlines(companyId: string, limit: number = 10): Promise<any[]> {
     console.log('📤 Fetching upcoming deadlines:', companyId);
     
-    const response = await fetch(`/api/companies/${companyId}/albums/deadlines?limit=${limit}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/albums/deadlines?limit=${limit}`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -370,7 +370,7 @@ export const companyApi = {
   async getRecentEvents(companyId: string, limit: number = 10): Promise<any[]> {
     console.log('📤 Fetching recent events:', companyId);
     
-    const response = await fetch(`/api/companies/${companyId}/albums/events?limit=${limit}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/albums/events?limit=${limit}`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -388,7 +388,7 @@ export const companyApi = {
   async getCompanyTemplates(companyId: string): Promise<any> {
     console.log('📤 Fetching company templates:', companyId);
     
-    const response = await fetch(`/api/companies/${companyId}/templates`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/templates`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -406,7 +406,7 @@ export const companyApi = {
   async createTemplate(companyId: string, templateData: { name: string; items: any[] }): Promise<any> {
     console.log('📤 Creating template:', templateData);
     
-    const response = await fetch(`/api/companies/${companyId}/templates`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/templates`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(templateData)
@@ -425,7 +425,7 @@ export const companyApi = {
   async updateTemplate(companyId: string, templateId: string, templateData: { name: string; items: any[] }): Promise<any> {
     console.log('📤 Updating template:', templateId, templateData);
     
-    const response = await fetch(`/api/companies/${companyId}/templates/${templateId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/templates/${templateId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(templateData)
@@ -444,7 +444,7 @@ export const companyApi = {
   async deleteTemplate(companyId: string, templateId: string): Promise<any> {
     console.log('📤 Deleting template:', templateId);
     
-    const response = await fetch(`/api/companies/${companyId}/templates/${templateId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/templates/${templateId}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
@@ -470,7 +470,7 @@ export const companyApi = {
   async getDepartments(): Promise<any> {
     console.log('📤 Fetching departments');
     
-    const response = await fetch('/api/dictionaries/departments', {
+    const response = await fetch(`${API_BASE_URL}/api/dictionaries/departments`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -521,7 +521,7 @@ export const companyApi = {
   }): Promise<{ inviteLink: string; token: string }> {
     console.log('🔗 Generating invite link:', data);
     
-    const response = await fetch(`/api/companies/${data.companyId}/invitations/generate-link`, {
+    const response = await fetch(`${API_BASE_URL}/api/companies/${data.companyId}/invitations/generate-link`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ role: data.role })

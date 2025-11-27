@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+// API Base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export function TelegramAuthCallback() {
   const navigate = useNavigate();
 
@@ -54,7 +57,7 @@ export function TelegramAuthCallback() {
         headers['X-Invite-Token'] = inviteToken;
       }
       
-      const response = await fetch('/api/auth/telegram', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/telegram`, {
         method: 'POST',
         headers,
         body: JSON.stringify(user)

@@ -16,6 +16,9 @@ import { Sidebar } from './components/Sidebar';
 import { InvitePage } from './components/InvitePage';
 import { TelegramAuthCallback } from './components/TelegramAuthCallback';
 
+// API Base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export type Page = 'landing' | 'login' | 'onboarding' | 'dashboard' | 'projects' | 'project' | 'album' | 'albums-view' | 'users' | 'settings' | 'reports' | 'sections';
 
 export interface User {
