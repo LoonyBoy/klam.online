@@ -94,6 +94,33 @@ export function TelegramAuthCallback() {
         photoUrl: data.user.photoUrl,
       }));
 
+      // Если был токен приглашения, проверяем компании пользователя
+      if (inviteToken) {
+        console.log('🏢 Получение компаний пользователя после приглашения...');
+        try {
+          const companiesResponse = await fetch(`${API_BASE_URL}/api/companies`, {
+            headers: {
+              'Authorization': `Bearer ${data.token}`,
+              'ngrok-skip-browser-warning': 'true'
+            }
+          });
+
+          if (companiesResponse.ok) {
+            const companies = await companiesResponse.json();
+            if (companies && companies.length > 0) {
+              // Автоматически выбираем первую компанию
+              const firstCompany = companies[0];
+              localStorage.setItem('companyId', firstCompany.id);
+              localStorage.setItem('hasCompletedOnboarding', 'true');
+              console.log('✅ Компания установлена:', firstCompany.id);
+            }
+          }
+        } catch (error) {
+          console.error('⚠️ Ошибка получения компаний:', error);
+          // Продолжаем даже если не удалось получить компании
+        }
+      }
+
       // Перенаправляем на главную страницу
       console.log('🔄 Перенаправление...');
       window.location.href = '/';
