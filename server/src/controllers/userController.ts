@@ -16,6 +16,29 @@ export const getCompanyUsers = async (req: Request, res: Response) => {
     
     const hasDepartmentId = columns.length > 0;
 
+    // Получаем администраторов и владельцев из company_users
+    const [adminRows] = await pool.query<RowDataPacket[]>(
+      `SELECT 
+        cu.id,
+        u.telegram_id,
+        u.telegram_username,
+        u.first_name,
+        u.last_name,
+        u.email,
+        cu.role_in_company
+      FROM company_users cu
+      INNER JOIN users u ON cu.user_id = u.id
+      WHERE cu.company_id = ?
+      ORDER BY 
+        CASE cu.role_in_company
+          WHEN 'owner' THEN 1
+          WHEN 'admin' THEN 2
+          ELSE 3
+        END,
+        u.first_name, u.last_name`,
+      [companyId]
+    );
+
     // Получаем всех участников (participants) компании
     let query;
     if (hasDepartmentId) {
@@ -52,8 +75,21 @@ export const getCompanyUsers = async (req: Request, res: Response) => {
 
     const [participantRows] = await pool.query<RowDataPacket[]>(query, [companyId]);
 
-    // Формируем ответ
-    const users = participantRows.map((row: any) => {
+    // Формируем список пользователей из админов
+    const adminUsers = adminRows.map((row: any) => ({
+      id: `admin-${row.id}`,
+      telegramId: row.telegram_id,
+      telegramUsername: row.telegram_username,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      email: row.email,
+      roleInCompany: row.role_in_company,
+      roleType: null,
+      department: null
+    }));
+
+    // Формируем список участников
+    const participantUsers = participantRows.map((row: any) => {
       let department = null;
       
       if (hasDepartmentId && row.department_id) {
@@ -65,7 +101,7 @@ export const getCompanyUsers = async (req: Request, res: Response) => {
       }
 
       return {
-        id: row.id,
+        id: `participant-${row.id}`,
         telegramId: row.telegram_id,
         telegramUsername: row.telegram_username,
         firstName: row.first_name,
@@ -76,6 +112,9 @@ export const getCompanyUsers = async (req: Request, res: Response) => {
         department
       };
     });
+
+    // Объединяем админов и участников
+    const users = [...adminUsers, ...participantUsers];
 
     res.json({ users });
   } catch (error) {
