@@ -1,4 +1,4 @@
-# Deployment Guide - KLAM.Online
+# Deployment Guide - KlamBot.ru
 
 ## Подготовка к деплою
 
@@ -74,8 +74,8 @@ EXIT;
 cd /var/www
 
 # Клонирование репозитория
-git clone https://github.com/LoonyBoy/klam.online.git
-cd klam.online
+git clone https://github.com/LoonyBoy/klambot.ru.git
+cd klambot.ru
 
 # Установка зависимостей фронтенда
 npm install
@@ -114,7 +114,7 @@ JWT_EXPIRES_IN=7d
 TELEGRAM_BOT_TOKEN=8401385119:AAFhkT72xEU4D5YmjnRIpWDTmPfy3rLGpHs
 TELEGRAM_BOT_USERNAME=klamonline_bot
 
-CORS_ORIGIN=https://klam.online
+CORS_ORIGIN=https://klambot.ru
 
 SESSION_SECRET=СГЕНЕРИРУЙТЕ_СЛУЧАЙНЫЙ_КЛЮЧ_64_СИМВОЛА
 SESSION_MAX_AGE=604800000
@@ -157,7 +157,7 @@ pm2 save
 ### Шаг 8: Настройка Nginx
 
 ```bash
-nano /etc/nginx/sites-available/klam.online
+nano /etc/nginx/sites-available/klambot.ru
 ```
 
 Конфигурация Nginx:
@@ -166,9 +166,9 @@ nano /etc/nginx/sites-available/klam.online
 # Frontend
 server {
     listen 80;
-    server_name klam.online www.klam.online;
+    server_name klambot.ru www.klambot.ru;
 
-    root /var/www/klam.online/dist;
+    root /var/www/klambot.ru/dist;
     index index.html;
 
     # Gzip compression
@@ -189,7 +189,7 @@ server {
 # Backend API
 server {
     listen 80;
-    server_name api.klam.online;
+    server_name api.klambot.ru;
 
     location / {
         proxy_pass http://localhost:3001;
@@ -208,7 +208,7 @@ server {
 Активация конфигурации:
 
 ```bash
-ln -s /etc/nginx/sites-available/klam.online /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/klambot.ru /etc/nginx/sites-enabled/
 nginx -t
 systemctl restart nginx
 ```
@@ -220,7 +220,7 @@ systemctl restart nginx
 apt install -y certbot python3-certbot-nginx
 
 # Получение сертификата
-certbot --nginx -d klam.online -d www.klam.online -d api.klam.online
+certbot --nginx -d klambot.ru -d www.klambot.ru -d api.klambot.ru
 
 # Автообновление
 certbot renew --dry-run
@@ -283,9 +283,9 @@ pm2 delete klam-backend
 В панели управления доменом добавьте A-записи:
 
 ```
-klam.online         A    80.87.98.48
-www.klam.online     A    80.87.98.48
-api.klam.online     A    80.87.98.48
+klambot.ru         A    80.87.98.48
+www.klambot.ru     A    80.87.98.48
+api.klambot.ru     A    80.87.98.48
 ```
 
 ## Мониторинг
@@ -333,7 +333,7 @@ crontab -e
 ### Backend не запускается
 ```bash
 pm2 logs klam-backend
-cd /var/www/klam.online/server
+cd /var/www/klambot.ru/server
 npm run db:test
 ```
 
@@ -378,6 +378,6 @@ mysql -u klamuser -p
 ## Готово! 🎉
 
 Ваше приложение доступно по адресу:
-- **Frontend:** https://klam.online
-- **Backend API:** https://api.klam.online
-- **Health Check:** https://api.klam.online/health
+- **Frontend:** https://klambot.ru
+- **Backend API:** https://api.klambot.ru
+- **Health Check:** https://api.klambot.ru/health

@@ -1,5 +1,5 @@
 // ============================================================================
-// KLAM.ONLINE - WebSocket Manager
+// KLAMBOT.RU - WebSocket Manager
 // Управление WebSocket соединениями для real-time обновлений
 // ============================================================================
 
@@ -55,7 +55,7 @@ class WebSocketManager {
       this.sendToClient(clientId, {
         type: 'connected',
         clientId,
-        message: 'Connected to KLAM.Online WebSocket',
+        message: 'Connected to KlamBot.ru WebSocket',
       });
     });
 

@@ -16,7 +16,7 @@
    localhost
    ```
    
-   **Важно:** Для production используйте реальный домен (например, `klam.online`)
+   **Важно:** Для production используйте реальный домен (например, `klambot.ru`)
 
 ## Шаг 2: Проверка настроек
 
@@ -93,12 +93,12 @@ function verifyTelegramAuth(data: TelegramAuthData, botToken: string): boolean {
    ```
    /setdomain
    @klamonline_bot
-   klam.online
+   klambot.ru
    ```
 
 4. Обновить CORS на backend:
    ```env
-   CORS_ORIGIN=https://klam.online
+   CORS_ORIGIN=https://klambot.ru
    ```
 
 ## Troubleshooting

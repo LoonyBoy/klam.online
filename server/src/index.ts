@@ -89,7 +89,7 @@ app.get('/health', async (req: Request, res: Response) => {
 // API version info
 app.get('/api', (req: Request, res: Response) => {
   res.json({
-    name: 'KLAM.Online API',
+    name: 'KlamBot.ru API',
     version: '1.0.0',
     environment: NODE_ENV,
   });
@@ -152,7 +152,7 @@ async function startServer() {
     // Start server
     httpServer.listen(PORT, () => {
       console.log('');
-      console.log('🚀 KLAM.Online Server');
+      console.log('🚀 KlamBot.ru Server');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log(`📍 Server running on: http://localhost:${PORT}`);
       console.log(`🔌 WebSocket available on: ws://localhost:${PORT}/ws`);

@@ -325,7 +325,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 />
               </div>
               <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-cyan-600 to-blue-600">
-                klam.online
+                klambot.ru
               </h1>
             </motion.div>
             <motion.p

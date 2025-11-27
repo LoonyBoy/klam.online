@@ -202,7 +202,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                 <FolderKanban className="w-6 h-6 text-white" />
               </div>
               <h1 className="text-2xl font-bold text-gray-900">
-                klam.online
+                klambot.ru
               </h1>
             </div>
             <Button 

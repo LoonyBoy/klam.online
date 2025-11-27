@@ -98,7 +98,7 @@ export function Sidebar({ currentPage, onNavigate, onLogout }: SidebarProps) {
       >
         {/* Заголовок */}
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          {!isCollapsed && <h1 className="text-blue-600">klam.online</h1>}
+          {!isCollapsed && <h1 className="text-blue-600">klambot.ru</h1>}
           {isCollapsed && <div className="text-blue-600 text-xl mx-auto">K</div>}
         </div>
 

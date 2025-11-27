@@ -1,6 +1,6 @@
-# KLAM.Online Server
+# KlamBot.ru Server
 
-Backend API сервер для системы управления проектами KLAM.Online.
+Backend API сервер для системы управления проектами KlamBot.ru.
 
 ## Технологии
 

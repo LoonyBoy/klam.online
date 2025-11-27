@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# KLAM.Online Initial Setup Script
+# KlamBot.ru Initial Setup Script
 # Run this on a fresh server
 
 set -e
 
-echo "🚀 KLAM.Online Server Setup"
+echo "🚀 KlamBot.ru Server Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -103,7 +103,7 @@ if [ -d "klam.online" ]; then
     cd klam.online
     git pull origin main
 else
-    echo "Enter GitHub repository URL (e.g., https://github.com/LoonyBoy/klam.online.git):"
+    echo "Enter GitHub repository URL (e.g., https://github.com/LoonyBoy/klambot.ru.git):"
     read REPO_URL
     git clone $REPO_URL
     cd klam.online
@@ -176,12 +176,12 @@ log_info "Backend started"
 echo ""
 echo "1️⃣4️⃣  Configuring Nginx..."
 
-cat > /etc/nginx/sites-available/klam.online <<'EOF'
+cat > /etc/nginx/sites-available/klambot.ru <<'EOF'
 server {
     listen 80;
-    server_name klam.online www.klam.online;
+    server_name klambot.ru www.klambot.ru;
 
-    root /var/www/klam.online/dist;
+    root /var/www/klambot.ru/dist;
     index index.html;
 
     gzip on;
@@ -199,7 +199,7 @@ server {
 
 server {
     listen 80;
-    server_name api.klam.online;
+    server_name api.klambot.ru;
 
     location / {
         proxy_pass http://localhost:3001;
@@ -215,7 +215,7 @@ server {
 }
 EOF
 
-ln -sf /etc/nginx/sites-available/klam.online /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/klambot.ru /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl restart nginx
@@ -239,7 +239,7 @@ if [ "$INSTALL_SSL" = "y" ]; then
     apt install -y certbot python3-certbot-nginx
     echo "Enter your email for Let's Encrypt:"
     read EMAIL
-    certbot --nginx -d klam.online -d www.klam.online -d api.klam.online --email $EMAIL --agree-tos --no-eff-email
+    certbot --nginx -d klambot.ru -d www.klambot.ru -d api.klambot.ru --email $EMAIL --agree-tos --no-eff-email
     log_info "SSL certificate installed"
 else
     log_warn "Skipping SSL installation"
@@ -266,7 +266,7 @@ echo "   Backend:  http://$(hostname -I | awk '{print $1}'):3001/health"
 echo ""
 echo "📝 Next steps:"
 echo "   1. Configure your DNS records"
-echo "   2. Point klam.online to this server IP"
+echo "   2. Point klambot.ru to this server IP"
 echo "   3. Update Telegram bot domain: /setdomain @klamonline_bot"
 echo ""
 echo "🔧 Useful commands:"

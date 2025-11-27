@@ -1,5 +1,5 @@
 // ============================================================================
-// KLAM.ONLINE - Email Service
+// KLAMBOT.RU - Email Service
 // Сервис для отправки email уведомлений
 // ============================================================================
 
@@ -123,7 +123,7 @@ class EmailService {
               <p>С уважением,<br>Команда <strong>${data.companyName}</strong></p>
             </div>
             <div class="footer">
-              <p>Это автоматическое уведомление от системы KLAM.Online</p>
+              <p>Это автоматическое уведомление от системы KlamBot.ru</p>
               <p>Пожалуйста, не отвечайте на это письмо</p>
             </div>
           </div>
@@ -132,7 +132,7 @@ class EmailService {
       `;
 
       const mailOptions = {
-        from: `"${data.companyName} - KLAM.Online" <${process.env.SMTP_USER}>`,
+        from: `"${data.companyName} - KlamBot.ru" <${process.env.SMTP_USER}>`,
         to: data.customerEmail,
         subject: subject,
         html: html,

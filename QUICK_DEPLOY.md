@@ -17,7 +17,7 @@ git push origin main
 ssh root@80.87.98.48
 
 # Скачать и запустить скрипт установки
-curl -o setup.sh https://raw.githubusercontent.com/LoonyBoy/klam.online/main/setup-server.sh
+curl -o setup.sh https://raw.githubusercontent.com/LoonyBoy/klambot.ru/main/setup-server.sh
 chmod +x setup.sh
 ./setup.sh
 ```
@@ -65,8 +65,8 @@ EXIT;
 
 ```bash
 cd /var/www
-git clone https://github.com/LoonyBoy/klam.online.git
-cd klam.online
+git clone https://github.com/LoonyBoy/klambot.ru.git
+cd klambot.ru
 ```
 
 ### 5. Установка зависимостей
@@ -89,7 +89,7 @@ nano .env
 ```env
 NODE_ENV=production
 DB_PASSWORD=Pelevin3322
-CORS_ORIGIN=https://klam.online
+CORS_ORIGIN=https://klambot.ru
 ```
 
 ### 7. Миграции
@@ -119,13 +119,13 @@ cd ..
 ### 10. Настройка Nginx
 
 ```bash
-nano /etc/nginx/sites-available/klam.online
+nano /etc/nginx/sites-available/klambot.ru
 ```
 
 Вставьте конфигурацию из `DEPLOYMENT.md`
 
 ```bash
-ln -s /etc/nginx/sites-available/klam.online /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/klambot.ru /etc/nginx/sites-enabled/
 nginx -t
 systemctl restart nginx
 ```
@@ -143,7 +143,7 @@ ufw enable
 
 ```bash
 apt install -y certbot python3-certbot-nginx
-certbot --nginx -d klam.online -d www.klam.online -d api.klam.online
+certbot --nginx -d klambot.ru -d www.klambot.ru -d api.klambot.ru
 ```
 
 ## Проверка
@@ -171,13 +171,13 @@ git pull
 
 ## Важно!
 
-1. **DNS записи:** Добавьте A-записи для `klam.online`, `www.klam.online`, `api.klam.online` → `80.87.98.48`
+1. **DNS записи:** Добавьте A-записи для `klambot.ru`, `www.klambot.ru`, `api.klambot.ru` → `80.87.98.48`
 
 2. **Telegram Bot:** Обновите домен через BotFather:
    ```
    /setdomain
    @klamonline_bot
-   klam.online
+   klambot.ru
    ```
 
 3. **Firewall:** Убедитесь что порты 80 и 443 открыты
@@ -189,7 +189,7 @@ git pull
 ### Backend не запускается
 ```bash
 pm2 logs klam-backend
-cd /var/www/klam.online/server
+cd /var/www/klambot.ru/server
 npm run db:test
 ```
 

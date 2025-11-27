@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# KLAM.Online Deployment Script
+# KlamBot.ru Deployment Script
 # Usage: ./deploy.sh
 
 set -e
 
-echo "🚀 Starting KLAM.Online deployment..."
+echo "🚀 Starting KlamBot.ru deployment..."
 echo ""
 
 # Configuration
-PROJECT_DIR="/var/www/klam.online"
+PROJECT_DIR="/var/www/klambot.ru"
 BACKUP_DIR="/root/backups"
 DATE=$(date +%Y%m%d_%H%M%S)
 
@@ -103,6 +103,6 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 log_info "Deployment completed successfully! 🎉"
 echo ""
-echo "Frontend: https://klam.online"
-echo "Backend:  https://api.klam.online/health"
+echo "Frontend: https://klambot.ru"
+echo "Backend:  https://api.klambot.ru/health"
 echo ""
