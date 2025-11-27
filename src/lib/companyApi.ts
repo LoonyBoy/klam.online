@@ -616,6 +616,47 @@ export const companyApi = {
     }
     
     return response.json();
+  },
+
+  // Обновить роль пользователя в компании
+  async updateCompanyUserRole(companyId: string, userId: string, newRole: 'admin' | 'member'): Promise<any> {
+    console.log('📤 Updating user role:', { companyId, userId, newRole });
+    
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/users/${userId}/role`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ role: newRole })
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ Server error:', error);
+      throw new Error(error.error || 'Failed to update user role');
+    }
+
+    const data = await response.json();
+    console.log('✅ User role updated:', data);
+    return data;
+  },
+
+  // Удалить пользователя из компании
+  async removeCompanyUser(companyId: string, userId: string): Promise<any> {
+    console.log('🗑️ Removing user from company:', { companyId, userId });
+    
+    const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/users/${userId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ Server error:', error);
+      throw new Error(error.error || 'Failed to remove user from company');
+    }
+
+    const data = await response.json();
+    console.log('✅ User removed from company:', data);
+    return data;
   }
 };
 

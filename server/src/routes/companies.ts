@@ -96,6 +96,12 @@ router.get('/:companyId/users', authenticateToken, userController.getCompanyUser
 // Получить статистику по пользователям компании (требует аутентификацию)
 router.get('/:companyId/users/stats', authenticateToken, userController.getCompanyUsersStats);
 
+// Обновить роль пользователя в компании (требует аутентификацию, только owner)
+router.put('/:companyId/users/:userId/role', authenticateToken, userController.updateCompanyUserRole);
+
+// Удалить пользователя из компании (требует аутентификацию, только owner)
+router.delete('/:companyId/users/:userId', authenticateToken, userController.removeCompanyUser);
+
 // Получить участников компании (требует аутентификацию)
 router.get('/:companyId/participants', authenticateToken, userController.getCompanyParticipants);
 

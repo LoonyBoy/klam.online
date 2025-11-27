@@ -476,3 +476,112 @@ export const updateParticipant = async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to update participant' });
   }
 };
+
+/**
+ * Обновить роль пользователя в компании
+ */
+export const updateCompanyUserRole = async (req: Request, res: Response) => {
+  try {
+    const { companyId, userId } = req.params;
+    const { role } = req.body;
+    const currentUserId = (req as any).user?.id;
+
+    console.log('📤 Updating user role:', { companyId, userId, role, currentUserId });
+
+    // Проверяем, что текущий пользователь является владельцем компании
+    const [ownerCheck] = await pool.query<RowDataPacket[]>(
+      `SELECT role_in_company FROM company_users 
+       WHERE company_id = ? AND user_id = ?`,
+      [companyId, currentUserId]
+    );
+
+    if (ownerCheck.length === 0 || ownerCheck[0].role_in_company !== 'owner') {
+      return res.status(403).json({ error: 'Only company owner can change user roles' });
+    }
+
+    // Проверяем, что нельзя изменить роль владельца
+    const [targetUser] = await pool.query<RowDataPacket[]>(
+      `SELECT role_in_company FROM company_users 
+       WHERE company_id = ? AND id = ?`,
+      [companyId, userId]
+    );
+
+    if (targetUser.length === 0) {
+      return res.status(404).json({ error: 'User not found in company' });
+    }
+
+    if (targetUser[0].role_in_company === 'owner') {
+      return res.status(403).json({ error: 'Cannot change owner role' });
+    }
+
+    // Обновляем роль
+    await pool.query(
+      `UPDATE company_users SET role_in_company = ? WHERE company_id = ? AND id = ?`,
+      [role, companyId, userId]
+    );
+
+    console.log('✅ User role updated successfully');
+
+    return res.json({
+      success: true,
+      message: 'User role updated successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error updating user role:', error);
+    return res.status(500).json({ error: 'Failed to update user role' });
+  }
+};
+
+/**
+ * Удалить пользователя из компании
+ */
+export const removeCompanyUser = async (req: Request, res: Response) => {
+  try {
+    const { companyId, userId } = req.params;
+    const currentUserId = (req as any).user?.id;
+
+    console.log('🗑️ Removing user from company:', { companyId, userId, currentUserId });
+
+    // Проверяем, что текущий пользователь является владельцем компании
+    const [ownerCheck] = await pool.query<RowDataPacket[]>(
+      `SELECT role_in_company FROM company_users 
+       WHERE company_id = ? AND user_id = ?`,
+      [companyId, currentUserId]
+    );
+
+    if (ownerCheck.length === 0 || ownerCheck[0].role_in_company !== 'owner') {
+      return res.status(403).json({ error: 'Only company owner can remove users' });
+    }
+
+    // Проверяем, что нельзя удалить владельца
+    const [targetUser] = await pool.query<RowDataPacket[]>(
+      `SELECT role_in_company FROM company_users 
+       WHERE company_id = ? AND id = ?`,
+      [companyId, userId]
+    );
+
+    if (targetUser.length === 0) {
+      return res.status(404).json({ error: 'User not found in company' });
+    }
+
+    if (targetUser[0].role_in_company === 'owner') {
+      return res.status(403).json({ error: 'Cannot remove company owner' });
+    }
+
+    // Удаляем пользователя из компании
+    await pool.query(
+      `DELETE FROM company_users WHERE company_id = ? AND id = ?`,
+      [companyId, userId]
+    );
+
+    console.log('✅ User removed from company successfully');
+
+    return res.json({
+      success: true,
+      message: 'User removed from company successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error removing user from company:', error);
+    return res.status(500).json({ error: 'Failed to remove user from company' });
+  }
+};

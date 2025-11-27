@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Plus, Edit, Users as UsersIcon, UserCheck, UserCog, Edit2, Trash2, Link2, Copy, Check } from 'lucide-react';
-import { getCompanyUsers, getCompanyUsersStats, addParticipant, getDepartments, updateParticipant, companyApi } from '../lib/companyApi';
+import { getCompanyUsers, getCompanyUsersStats, addParticipant, getDepartments, updateParticipant, companyApi, getUserProfile } from '../lib/companyApi';
 
 interface User {
   id: string;
@@ -52,6 +52,20 @@ export function Users() {
   const [generatedLink, setGeneratedLink] = useState('');
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  
+  // Роль текущего пользователя
+  const [currentUserRole, setCurrentUserRole] = useState<'owner' | 'admin' | 'member'>('member');
+  
+  // Для редактирования админа
+  const [editingAdmin, setEditingAdmin] = useState<User | null>(null);
+  const [isEditAdminOpen, setIsEditAdminOpen] = useState(false);
+  const [adminNewRole, setAdminNewRole] = useState<'admin' | 'member'>('admin');
+  const [isUpdatingAdmin, setIsUpdatingAdmin] = useState(false);
+  
+  // Для удаления админа
+  const [deletingAdmin, setDeletingAdmin] = useState<User | null>(null);
+  const [isDeleteAdminOpen, setIsDeleteAdminOpen] = useState(false);
+  const [isDeletingAdmin, setIsDeletingAdmin] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -66,15 +80,17 @@ export function Users() {
         return;
       }
 
-      const [usersResponse, statsResponse, departmentsResponse] = await Promise.all([
+      const [usersResponse, statsResponse, departmentsResponse, profileData] = await Promise.all([
         getCompanyUsers(companyId),
         getCompanyUsersStats(companyId),
-        getDepartments()
+        getDepartments(),
+        getUserProfile(companyId)
       ]);
 
       console.log('👥 Users loaded:', usersResponse.users);
       console.log('🔍 First user structure:', usersResponse.users?.[0]);
       console.log('👑 Admins/Owners:', usersResponse.users?.filter((u: User) => u.roleInCompany === 'owner' || u.roleInCompany === 'admin'));
+      console.log('👤 Current user role:', profileData.role_in_company);
 
       setUsers(usersResponse.users || []);
       setStats({
@@ -83,10 +99,61 @@ export function Users() {
         customers: statsResponse.customers || 0
       });
       setDepartments(departmentsResponse.departments || []);
+      setCurrentUserRole(profileData.role_in_company || 'member');
     } catch (error) {
       console.error('❌ Failed to load users data:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Обновление роли админа
+  const handleUpdateAdminRole = async () => {
+    if (!editingAdmin) return;
+    
+    try {
+      setIsUpdatingAdmin(true);
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) return;
+
+      // ID админа имеет формат "admin-{id}", извлекаем числовой id
+      const adminId = editingAdmin.id.replace('admin-', '');
+      
+      await companyApi.updateCompanyUserRole(companyId, adminId, adminNewRole);
+      
+      setIsEditAdminOpen(false);
+      setEditingAdmin(null);
+      await loadData();
+    } catch (error) {
+      console.error('❌ Failed to update admin role:', error);
+      alert('Ошибка при изменении роли');
+    } finally {
+      setIsUpdatingAdmin(false);
+    }
+  };
+
+  // Удаление админа из компании
+  const handleDeleteAdmin = async () => {
+    if (!deletingAdmin) return;
+    
+    try {
+      setIsDeletingAdmin(true);
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) return;
+
+      // ID админа имеет формат "admin-{id}", извлекаем числовой id
+      const adminId = deletingAdmin.id.replace('admin-', '');
+      
+      await companyApi.removeCompanyUser(companyId, adminId);
+      
+      setIsDeleteAdminOpen(false);
+      setDeletingAdmin(null);
+      await loadData();
+    } catch (error) {
+      console.error('❌ Failed to delete admin:', error);
+      alert('Ошибка при удалении администратора');
+    } finally {
+      setIsDeletingAdmin(false);
     }
   };
 
@@ -515,12 +582,99 @@ export function Users() {
                         </p>
                       </div>
                     </div>
+                    {/* Кнопки редактирования и удаления - только для owner и только для админов */}
+                    {currentUserRole === 'owner' && user.roleInCompany === 'admin' && (
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => {
+                            setEditingAdmin(user);
+                            setAdminNewRole('admin');
+                            setIsEditAdminOpen(true);
+                          }}
+                          className="text-gray-500 hover:text-indigo-600"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => {
+                            setDeletingAdmin(user);
+                            setIsDeleteAdminOpen(true);
+                          }}
+                          className="text-gray-500 hover:text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))
             )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Диалог редактирования роли админа */}
+      <Dialog open={isEditAdminOpen} onOpenChange={setIsEditAdminOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Изменить роль пользователя</DialogTitle>
+            <DialogDescription>
+              Изменение роли для {editingAdmin?.firstName} {editingAdmin?.lastName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Новая роль</Label>
+            <Select value={adminNewRole} onValueChange={(v) => setAdminNewRole(v as 'admin' | 'member')}>
+              <SelectTrigger className="mt-2">
+                <SelectValue placeholder="Выберите роль" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">Администратор</SelectItem>
+                <SelectItem value="member">Участник</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditAdminOpen(false)}>
+              Отмена
+            </Button>
+            <Button 
+              onClick={handleUpdateAdminRole}
+              disabled={isUpdatingAdmin}
+            >
+              {isUpdatingAdmin ? 'Сохранение...' : 'Сохранить'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Диалог удаления админа */}
+      <Dialog open={isDeleteAdminOpen} onOpenChange={setIsDeleteAdminOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Удалить администратора</DialogTitle>
+            <DialogDescription>
+              Вы уверены, что хотите удалить {deletingAdmin?.firstName} {deletingAdmin?.lastName} из администраторов компании?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteAdminOpen(false)}>
+              Отмена
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={handleDeleteAdmin}
+              disabled={isDeletingAdmin}
+            >
+              {isDeletingAdmin ? 'Удаление...' : 'Удалить'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Статистика */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
