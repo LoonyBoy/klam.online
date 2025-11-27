@@ -56,7 +56,8 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
   };
 
   // Подсчет статистики из реальных данных
-  const activeProjects = projects.filter((p: any) => p.stats.activeAlbums > 0);
+  // Проект считается активным, если его статус не 'pause' и не 'archive'
+  const activeProjects = projects.filter((p: any) => p.status !== 'pause' && p.status !== 'archive');
   const totalAlbums = projects.reduce((sum: number, p: any) => sum + p.stats.totalAlbums, 0);
   const activeAlbums = projects.reduce((sum: number, p: any) => sum + p.stats.activeAlbums, 0);
 

@@ -70,7 +70,8 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
   };
 
   // Подсчет статистики из реальных данных
-  const activeProjects = projects.filter(p => p.stats.activeAlbums > 0);
+  // Проект считается активным, если его статус не 'pause' и не 'archive'
+  const activeProjects = projects.filter(p => p.status !== 'pause' && p.status !== 'archive');
   const uniqueDepartments = new Set<string>();
   // TODO: когда будет связь с departments, подсчитывать уникальные отделы
 

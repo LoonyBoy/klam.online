@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { parseStatusCommands, formatStatusChangeResponse, getReactionEmojiForStatus } from '../utils/statusAliases';
 import { query } from '../db';
 import { wsManager } from '../websocket';
+import { emailService } from '../services/emailService';
 
 dotenv.config();
 
@@ -231,6 +232,40 @@ export function initBot() {
               newStatusId,
               statusCode: command.statusCode,
             });
+
+            // Если статус изменен на "Отправлено" (sent), отправляем email заказчику
+            if (command.statusCode === 'sent' && album.link) {
+              try {
+                // Получаем информацию о заказчике
+                const customers = await query<any>(
+                  `SELECT u.email, u.first_name, u.last_name
+                   FROM participants p
+                   JOIN users u ON p.user_id = u.id
+                   WHERE p.project_id = ? AND p.role = 'customer'
+                   LIMIT 1`,
+                  [project.id]
+                );
+
+                if (customers && customers.length > 0 && customers[0].email) {
+                  const customer = customers[0];
+                  await emailService.sendAlbumSentNotification({
+                    albumCode: command.albumCode,
+                    albumName: album.name,
+                    albumLink: album.link,
+                    projectName: project.name,
+                    companyName: 'KLAM.Online', // TODO: Get from company table
+                    customerEmail: customer.email,
+                    customerName: `${customer.first_name} ${customer.last_name || ''}`.trim(),
+                  });
+                  console.log(`📧 Email notification sent to ${customer.email}`);
+                } else {
+                  console.log('⚠️ Customer email not found, skipping email notification');
+                }
+              } catch (emailError) {
+                console.error('❌ Failed to send email notification:', emailError);
+                // Не прерываем процесс, если email не отправился
+              }
+            }
 
             // Ставим реакцию на сообщение (если не получается - отправляем текст)
             try {
