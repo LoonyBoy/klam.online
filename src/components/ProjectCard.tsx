@@ -7,6 +7,7 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { 
   ArrowLeft, 
   ExternalLink, 
@@ -90,11 +91,20 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   const [newUserTelegram, setNewUserTelegram] = useState('');
   const [newUserDepartment, setNewUserDepartment] = useState('');
   const [isCreatingUser, setIsCreatingUser] = useState(false);
+  
   // Загрузка данных проекта при монтировании компонента
   useEffect(() => {
     loadProjectDetails();
     loadProjectAlbums();
+    loadDepartments();
   }, [projectId]);
+
+  // Загружаем доступных участников когда executors/clients обновились
+  useEffect(() => {
+    if (!isLoading) {
+      loadAvailableParticipants();
+    }
+  }, [executors, clients, isLoading]);
 
   const loadProjectAlbums = async () => {
     try {
@@ -188,32 +198,23 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
 
       const participants = await companyApi.getCompanyParticipants(companyId);
       
-      // API возвращает массив участников напрямую
       if (Array.isArray(participants)) {
-        // Фильтруем участников, которые ещё не добавлены в проект
-        // Используем participantId для сравнения (это ID из таблицы participants)
-        const currentExecutorIds = executors.map(e => e.participantId?.toString() || e.id);
-        const currentClientIds = clients.map(c => c.participantId?.toString() || c.id);
+        const currentExecutorIds = executors.map(e => (e.participantId || e.id)?.toString());
+        const currentClientIds = clients.map(c => (c.participantId || c.id)?.toString());
         
-        const executorsList = participants
-          .filter((p: any) => p.roleType === 'executor' && !currentExecutorIds.includes(p.id.toString()));
+        const executorsList = participants.filter((p: any) => 
+          p.roleType === 'executor' && !currentExecutorIds.includes(p.id.toString())
+        );
         
-        const clientsList = participants
-          .filter((p: any) => p.roleType === 'customer' && !currentClientIds.includes(p.id.toString()));
-        
-        console.log('📊 Available participants:', {
-          total: participants.length,
-          executors: executorsList.length,
-          clients: clientsList.length,
-          currentExecutorIds,
-          currentClientIds
-        });
+        const clientsList = participants.filter((p: any) => 
+          p.roleType === 'customer' && !currentClientIds.includes(p.id.toString())
+        );
         
         setAvailableExecutors(executorsList);
         setAvailableClients(clientsList);
       }
     } catch (error) {
-      console.error('❌ Failed to load participants:', error);
+      console.error('Failed to load participants:', error);
       toast.error('Не удалось загрузить список участников');
     } finally {
       setIsLoadingParticipants(false);
@@ -228,7 +229,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         setDepartments(response.departments);
       }
     } catch (error) {
-      console.error('❌ Failed to load departments:', error);
+      console.error('Failed to load departments:', error);
     }
   };
 
@@ -544,6 +545,33 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
                 <Archive className="w-4 h-4" />
                 В архив
               </button>
+
+              {/* Кнопка Telegram-канала */}
+              {project.telegramChannel && project.telegramChannel.chatId ? (
+                <a
+                  href={`https://web.telegram.org/a/#${project.telegramChannel.chatId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 bg-blue-100 text-blue-700 hover:bg-blue-200"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Telegram-канал
+                </a>
+              ) : (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 bg-gray-100 text-gray-400 cursor-not-allowed">
+                        <MessageSquare className="w-4 h-4" />
+                        Telegram-канал
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Канал не привязан. Добавьте бота @klamonline_bot в канал проекта.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           </div>
         </div>
@@ -581,21 +609,6 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
                 </span>
               ))}
             </div>
-          </div>
-        )}
-        
-        {/* Telegram канал */}
-        {project.telegramChannel && project.telegramChannel.inviteLink && (
-          <div className="pt-4 border-t border-gray-100">
-            <a 
-              href={project.telegramChannel.inviteLink} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-            >
-              <MessageSquare className="w-4 h-4" />
-              Открыть Telegram канал проекта
-            </a>
           </div>
         )}
       </div>
@@ -879,6 +892,9 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
                     <SelectValue placeholder="Выберите отдел" />
                   </SelectTrigger>
                   <SelectContent>
+                    {departments.length === 0 && (
+                      <SelectItem value="_loading" disabled>Загрузка...</SelectItem>
+                    )}
                     {departments.map((dept: any) => (
                       <SelectItem key={dept.id} value={dept.code}>
                         {dept.name} ({dept.code})
@@ -915,10 +931,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       {/* Диалог добавления заказчика */}
       <Dialog open={isAddClientOpen} onOpenChange={(open) => {
         setIsAddClientOpen(open);
-        if (open) {
-          loadAvailableParticipants();
-          loadDepartments();
-        } else {
+        if (!open) {
           setSelectedParticipantId('');
           resetNewUserForm();
         }
@@ -1050,6 +1063,9 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
                     <SelectValue placeholder="Выберите отдел" />
                   </SelectTrigger>
                   <SelectContent>
+                    {departments.length === 0 && (
+                      <SelectItem value="_loading" disabled>Загрузка...</SelectItem>
+                    )}
                     {departments.map((dept: any) => (
                       <SelectItem key={dept.id} value={dept.code}>
                         {dept.name} ({dept.code})

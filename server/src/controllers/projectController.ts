@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { pool } from '../db';
 import { RowDataPacket } from 'mysql2';
 import { parseTelegramChannel } from '../utils/telegramChannelParser';
+import TelegramBot from 'node-telegram-bot-api';
 
 /**
  * GET /api/companies/:companyId/projects
@@ -302,16 +303,46 @@ export async function createProject(req: Request, res: Response) {
       
       console.log(`📱 Parsed Telegram channel:`, channelInfo);
       
+      // Если есть chat_id, пытаемся получить invite-ссылку через Telegram Bot API
+      let inviteLink = channelInfo.inviteLink;
+      let chatTitle = '';
+      
+      if (channelInfo.chatId) {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (botToken) {
+          try {
+            const bot = new TelegramBot(botToken, { polling: false });
+            
+            // Получаем информацию о чате
+            const chatInfo = await bot.getChat(channelInfo.chatId);
+            chatTitle = chatInfo.title || '';
+            
+            // Пытаемся создать invite-ссылку (бот должен быть админом)
+            try {
+              const exportedLink = await bot.exportChatInviteLink(channelInfo.chatId);
+              if (exportedLink) {
+                inviteLink = exportedLink;
+                console.log(`🔗 Created invite link for chat ${channelInfo.chatId}: ${inviteLink}`);
+              }
+            } catch (linkError) {
+              console.log(`⚠️ Could not create invite link (bot may not be admin):`, linkError);
+            }
+          } catch (botError) {
+            console.log(`⚠️ Could not get chat info:`, botError);
+          }
+        }
+      }
+      
       await connection.query(
-        `INSERT INTO project_channels (project_id, telegram_chat_id, invite_link, added_by)
-         VALUES (?, ?, ?, ?)`,
-        [projectId, channelInfo.chatId, channelInfo.inviteLink, userId]
+        `INSERT INTO project_channels (project_id, telegram_chat_id, telegram_chat_title, invite_link, added_by)
+         VALUES (?, ?, ?, ?, ?)`,
+        [projectId, channelInfo.chatId, chatTitle, inviteLink, userId]
       );
       
       if (channelInfo.chatId) {
-        console.log(`✅ Saved Telegram channel with Chat ID: ${channelInfo.chatId}`);
-      } else if (channelInfo.inviteLink) {
-        console.log(`✅ Saved Telegram channel invite link: ${channelInfo.inviteLink}`);
+        console.log(`✅ Saved Telegram channel with Chat ID: ${channelInfo.chatId}, invite_link: ${inviteLink || 'none'}`);
+      } else if (inviteLink) {
+        console.log(`✅ Saved Telegram channel invite link: ${inviteLink}`);
       }
     }
 

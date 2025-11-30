@@ -33,30 +33,81 @@ export function initBot() {
         const newStatus = update.new_chat_member.status;
         const oldStatus = update.old_chat_member.status;
 
-        // Проверяем, что бота добавили (изменился статус на member или administrator)
+        // Проверяем, что бота добавили или повысили до администратора
         const wasAdded = 
           (oldStatus === 'left' || oldStatus === 'kicked') && 
           (newStatus === 'member' || newStatus === 'administrator');
+        
+        const wasPromoted = oldStatus === 'member' && newStatus === 'administrator';
 
+        // Бота добавили в канал/группу
         if (wasAdded) {
-          console.log(`✅ Bot added to chat: ${chat.title} (${chat.id})`);
+          console.log(`✅ Bot added to chat: ${chat.title} (${chat.id}) as ${newStatus}`);
 
-          // Формируем сообщение с информацией о чате
-          let message = `🤖 <b>KLAM Bot активирован!</b>\n\n`;
-          message += `📋 <b>Информация о чате:</b>\n`;
-          message += `• <b>ID чата:</b> <code>${chat.id}</code>\n`;
-          message += `• <b>Название:</b> ${chat.title}\n`;
-          message += `• <b>Тип:</b> ${chat.type === 'channel' ? 'Канал' : chat.type === 'supergroup' ? 'Супергруппа' : 'Группа'}\n`;
-          
-          if ((chat as any).username) {
-            message += `• <b>Username:</b> @${(chat as any).username}\n`;
+          // Пытаемся получить существующую invite-ссылку канала через getChat
+          let existingInviteLink = '';
+          try {
+            const chatInfo = await bot?.getChat(chat.id);
+            if (chatInfo?.invite_link) {
+              existingInviteLink = chatInfo.invite_link;
+              console.log(`🔗 Found existing invite link for chat ${chat.id}: ${existingInviteLink}`);
+            }
+          } catch (chatError) {
+            console.log(`⚠️ Could not get chat info for ${chat.id}:`, chatError);
           }
 
-          message += `\n💡 <b>Как использовать ID чата:</b>\n`;
-          message += `Скопируйте ID чата <code>${chat.id}</code> и вставьте его в форму создания проекта в KlamBot.ru.\n\n`;
-          message += `Бот готов к работе! 🚀`;
+          // Пытаемся связать с проектом по invite-ссылке
+          if (existingInviteLink) {
+            try {
+              const updateResult = await query(
+                `UPDATE project_channels 
+                 SET telegram_chat_id = ?, telegram_chat_title = ?
+                 WHERE invite_link = ? AND (telegram_chat_id IS NULL OR telegram_chat_id = '')`,
+                [chat.id.toString(), chat.title, existingInviteLink]
+              );
+              
+              if ((updateResult as any).affectedRows > 0) {
+                console.log(`✅ Linked chat ${chat.id} (${chat.title}) to project by invite link`);
+              }
+            } catch (dbError) {
+              console.log(`⚠️ Could not link chat to project:`, dbError);
+            }
+          }
 
-          // Отправляем сообщение в чат
+          // Если сразу добавили как администратора — создаём invite-ссылку и сохраняем в БД
+          let inviteLink = existingInviteLink;
+          if (newStatus === 'administrator') {
+            try {
+              // Создаём новую invite-ссылку
+              const exportedLink = await bot?.exportChatInviteLink(chat.id);
+              if (exportedLink) {
+                inviteLink = exportedLink;
+                console.log(`🔗 Created invite link for chat ${chat.id}: ${inviteLink}`);
+                
+                // Сохраняем invite_link в БД (если уже есть запись с этим chat_id)
+                const updateResult = await query(
+                  `UPDATE project_channels 
+                   SET invite_link = ?, telegram_chat_title = ?
+                   WHERE telegram_chat_id = ?`,
+                  [inviteLink, chat.title, chat.id.toString()]
+                );
+                
+                if ((updateResult as any).affectedRows > 0) {
+                  console.log(`✅ Saved invite_link to project_channels for chat ${chat.id}`);
+                }
+              }
+            } catch (linkError) {
+              console.log(`⚠️ Could not create invite link for chat ${chat.id}:`, linkError);
+            }
+          }
+
+          // Формируем сообщение с chat_id
+          let message = `🤖 <b>KLAM Bot активирован!</b>\n\n`;
+          message += `📋 <b>ID канала для привязки проекта:</b>\n`;
+          message += `<code>${chat.id}</code>\n\n`;
+          message += `Скопируйте этот ID и вставьте при создании проекта на KlamBot.ru\n\n`;
+          message += `✅ Бот готов к работе!`;
+
           await bot?.sendMessage(chat.id, message, { 
             parse_mode: 'HTML',
             disable_notification: false
@@ -65,15 +116,47 @@ export function initBot() {
           console.log(`✅ Welcome message sent to ${chat.id}`);
         }
 
-        // Проверяем, что бота сделали администратором
-        if (oldStatus === 'member' && newStatus === 'administrator') {
+        // Бота повысили до администратора (был member, стал administrator)
+        if (wasPromoted) {
           console.log(`✅ Bot promoted to administrator in chat: ${chat.title} (${chat.id})`);
           
-          await bot?.sendMessage(
-            chat.id, 
-            `✅ Отлично! Бот получил права администратора.\n\nТеперь можно использовать этот канал для проекта в KlamBot.ru.`,
-            { parse_mode: 'HTML' }
-          );
+          // Создаём invite-ссылку и сохраняем в БД
+          let inviteLink = '';
+          let projectLinked = false;
+          try {
+            const exportedLink = await bot?.exportChatInviteLink(chat.id);
+            if (exportedLink) {
+              inviteLink = exportedLink;
+              console.log(`🔗 Created invite link for chat ${chat.id}: ${inviteLink}`);
+              
+              // Обновляем invite_link в project_channels если есть запись с этим chat_id
+              const updateResult = await query(
+                `UPDATE project_channels 
+                 SET invite_link = ?, telegram_chat_title = ?
+                 WHERE telegram_chat_id = ?`,
+                [inviteLink, chat.title, chat.id.toString()]
+              );
+              
+              if ((updateResult as any).affectedRows > 0) {
+                console.log(`✅ Saved invite_link to project_channels for chat ${chat.id}`);
+                projectLinked = true;
+              } else {
+                console.log(`ℹ️ No project found with chat_id ${chat.id} yet`);
+              }
+            }
+          } catch (linkError) {
+            console.log(`⚠️ Could not create invite link for chat ${chat.id}:`, linkError);
+          }
+          
+          let message = `✅ <b>Бот получил права администратора!</b>\n\n`;
+          if (projectLinked) {
+            message += `Теперь бот полноценно подключен к проекту.`;
+          } else {
+            message += `📋 <b>ID канала:</b> <code>${chat.id}</code>\n\n`;
+            message += `Укажите этот ID при создании проекта на KlamBot.ru`;
+          }
+          
+          await bot?.sendMessage(chat.id, message, { parse_mode: 'HTML' });
         }
 
       } catch (error) {
@@ -89,18 +172,45 @@ export function initBot() {
       if (chatType === 'private') {
         await bot?.sendMessage(
           chatId,
-          `👋 Привет! Я KLAM Bot.\n\n` +
-          `Добавь меня в свой канал или группу для управления проектами.\n\n` +
-          `После добавления я отправлю ID чата, который нужен для настройки проекта в KlamBot.ru.`
-        );
-      } else {
-        await bot?.sendMessage(
-          chatId,
-          `🤖 KLAM Bot активен в этом чате!\n\n` +
-          `📋 ID чата: <code>${chatId}</code>\n\n` +
-          `Используйте этот ID при создании проекта.`,
+          `👋 <b>Привет! Я KLAM Bot.</b>\n\n` +
+          `📋 <b>Как подключить бота к проекту:</b>\n\n` +
+          `1️⃣ Создайте канал или группу в Telegram\n` +
+          `2️⃣ Добавьте меня в канал\n` +
+          `3️⃣ Сделайте меня администратором с правом приглашать пользователей\n` +
+          `4️⃣ Я автоматически отправлю ссылку для подключения\n` +
+          `5️⃣ Скопируйте ссылку при создании проекта на KlamBot.ru`,
           { parse_mode: 'HTML' }
         );
+      } else {
+        // В группе/канале пробуем получить ссылку
+        let inviteLink = '';
+        try {
+          const exportedLink = await bot?.exportChatInviteLink(chatId);
+          if (exportedLink) {
+            inviteLink = exportedLink;
+          }
+        } catch (e) {
+          // Игнорируем ошибку
+        }
+
+        if (inviteLink) {
+          await bot?.sendMessage(
+            chatId,
+            `🤖 <b>KLAM Bot активен!</b>\n\n` +
+            `🔗 <b>Ссылка для подключения проекта:</b>\n` +
+            `<code>${inviteLink}</code>\n\n` +
+            `📋 Скопируйте эту ссылку при создании проекта на KlamBot.ru`,
+            { parse_mode: 'HTML' }
+          );
+        } else {
+          await bot?.sendMessage(
+            chatId,
+            `🤖 <b>KLAM Bot активен!</b>\n\n` +
+            `⚠️ Для получения ссылки сделайте бота администратором с правом приглашать пользователей.\n\n` +
+            `После этого напишите /link`,
+            { parse_mode: 'HTML' }
+          );
+        }
       }
     });
 
@@ -122,6 +232,58 @@ export function initBot() {
       await bot?.sendMessage(chatId, message, { parse_mode: 'HTML' });
     });
 
+    // Обработчик команды /link - получить и сохранить invite-ссылку
+    bot.onText(/\/link/, async (msg) => {
+      const chatId = msg.chat.id;
+      const chatType = msg.chat.type;
+
+      if (chatType === 'private') {
+        await bot?.sendMessage(chatId, '❌ Эта команда работает только в группах и каналах.');
+        return;
+      }
+
+      try {
+        // Пробуем экспортировать invite-ссылку
+        const inviteLink = await bot?.exportChatInviteLink(chatId);
+        
+        if (inviteLink) {
+          // Сначала пытаемся обновить запись по chat_id
+          const updateResult = await query(
+            `UPDATE project_channels 
+             SET invite_link = ?, telegram_chat_title = ?
+             WHERE telegram_chat_id = ?`,
+            [inviteLink, msg.chat.title || '', chatId.toString()]
+          );
+          
+          // Если не нашли по chat_id, пробуем связать по invite_link
+          if ((updateResult as any).affectedRows === 0) {
+            await query(
+              `UPDATE project_channels 
+               SET telegram_chat_id = ?, telegram_chat_title = ?
+               WHERE invite_link = ? AND (telegram_chat_id IS NULL OR telegram_chat_id = '')`,
+              [chatId.toString(), msg.chat.title || '', inviteLink]
+            );
+          }
+          
+          await bot?.sendMessage(
+            chatId,
+            `🔗 <b>Ссылка на канал:</b>\n\n` +
+            `<code>${inviteLink}</code>\n\n` +
+            `✅ Ссылка сохранена в системе.`,
+            { parse_mode: 'HTML' }
+          );
+        }
+      } catch (error: any) {
+        console.error('❌ Error getting invite link:', error);
+        await bot?.sendMessage(
+          chatId,
+          `❌ Не удалось получить ссылку.\n\n` +
+          `Убедитесь, что бот имеет права администратора с возможностью приглашать пользователей.`,
+          { parse_mode: 'HTML' }
+        );
+      }
+    });
+
     // Обработчик всех текстовых сообщений для парсинга алиасов статусов
     bot.on('message', async (msg) => {
       try {
@@ -130,7 +292,9 @@ export function initBot() {
           return;
         }
 
-        console.log(`📩 Received message: "${msg.text}" from chat ${msg.chat.id}`);
+        const chatId = msg.chat.id.toString();
+
+        console.log(`📩 Received message: "${msg.text}" from chat ${chatId}`);
 
         // Парсим сообщение на наличие команд смены статуса
         const commands = parseStatusCommands(msg.text);
@@ -142,7 +306,7 @@ export function initBot() {
           return; // Нет команд смены статуса
         }
 
-        console.log(`📋 Detected ${commands.length} status change command(s) in chat ${msg.chat.id}`);
+        console.log(`📋 Detected ${commands.length} status change command(s) in chat ${chatId}`);
 
         // Обрабатываем каждую команду
         for (const command of commands) {
@@ -205,13 +369,23 @@ export function initBot() {
 
             const newStatusId = statuses[0].id;
 
-            // Обновляем статус альбома
-            await query(
-              `UPDATE albums 
-               SET status_id = ?, last_status_at = NOW(), updated_at = NOW() 
-               WHERE id = ?`,
-              [newStatusId, album.id]
-            );
+            // Обновляем статус альбома (и local_link если указан путь)
+            if (command.localPath) {
+              await query(
+                `UPDATE albums 
+                 SET status_id = ?, local_link = ?, last_status_at = NOW(), updated_at = NOW() 
+                 WHERE id = ?`,
+                [newStatusId, command.localPath, album.id]
+              );
+              console.log(`📂 Updated local_link for album ${command.albumCode}: ${command.localPath}`);
+            } else {
+              await query(
+                `UPDATE albums 
+                 SET status_id = ?, last_status_at = NOW(), updated_at = NOW() 
+                 WHERE id = ?`,
+                [newStatusId, album.id]
+              );
+            }
 
             // Записываем событие в album_events
             await query(
@@ -277,10 +451,19 @@ export function initBot() {
                 is_big: false
               });
               console.log(`✅ Set reaction ${reactionEmoji} for album ${command.albumCode}`);
+              
+              // Если был сохранён путь, отправляем дополнительное уведомление
+              if (command.localPath) {
+                await bot?.sendMessage(
+                  msg.chat.id,
+                  `📂 Путь сохранён для ${command.albumCode}: ${command.localPath}`,
+                  { reply_to_message_id: msg.message_id }
+                );
+              }
             } catch (reactionError) {
               // Если не удалось поставить реакцию (например, в приватном канале),
               // отправляем короткое текстовое подтверждение
-              const response = formatStatusChangeResponse(command.albumCode, command.statusCode, true);
+              const response = formatStatusChangeResponse(command.albumCode, command.statusCode, true, command.localPath);
               try {
                 await bot?.sendMessage(msg.chat.id, response, {
                   reply_to_message_id: msg.message_id,

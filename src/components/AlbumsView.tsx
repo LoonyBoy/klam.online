@@ -81,6 +81,7 @@ export function AlbumsView({
         deadline: albumData.deadline || undefined,
         comment: albumData.comment || undefined,
         link: albumData.albumLink || undefined,
+        localLink: albumData.localLink || undefined,
       };
 
       // Создаем альбом через API
@@ -120,6 +121,7 @@ export function AlbumsView({
       if (updatedData.deadline !== undefined) apiData.deadline = updatedData.deadline;
       if (updatedData.comment !== undefined) apiData.comment = updatedData.comment;
       if (updatedData.albumLink !== undefined) apiData.link = updatedData.albumLink;
+      if (updatedData.localLink !== undefined) apiData.localLink = updatedData.localLink;
 
       // Обновляем альбом через API
       await companyApi.updateAlbum(companyId, projectId, albumId, apiData);

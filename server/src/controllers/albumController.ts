@@ -328,6 +328,7 @@ export async function getProjectAlbums(req: Request, res: Response): Promise<voi
         a.deadline,
         a.comment,
         a.link,
+        a.local_link,
         a.last_status_at,
         a.created_at,
         a.updated_at,
@@ -419,6 +420,7 @@ export async function getProjectAlbums(req: Request, res: Response): Promise<voi
         date: row.last_event_date || row.last_status_at || row.created_at
       },
       albumLink: row.link || '',
+      localLink: row.local_link || '',
       comment: row.comment || '',
       projectId: projectId
     }));
@@ -560,7 +562,8 @@ export async function createAlbum(req: Request, res: Response): Promise<void> {
       customerId, 
       deadline, 
       comment, 
-      link 
+      link,
+      localLink 
     } = req.body;
 
     const userId = (req as any).user?.id;
@@ -624,8 +627,8 @@ export async function createAlbum(req: Request, res: Response): Promise<void> {
     const [result] = await connection.query<any>(
       `INSERT INTO albums 
         (project_id, name, code, category, department_id, executor_id, customer_id, 
-         deadline, status_id, last_status_at, comment, link, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)`,
+         deadline, status_id, last_status_at, comment, link, local_link, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
       [
         projectId, 
         name, 
@@ -638,6 +641,7 @@ export async function createAlbum(req: Request, res: Response): Promise<void> {
         defaultStatusId,
         comment || null,
         link || null,
+        localLink || null,
         userId
       ]
     );
@@ -701,7 +705,8 @@ export async function updateAlbum(req: Request, res: Response): Promise<void> {
       customerId, 
       deadline, 
       comment, 
-      link 
+      link,
+      localLink 
     } = req.body;
 
     const userId = (req as any).user?.id;
@@ -801,6 +806,10 @@ export async function updateAlbum(req: Request, res: Response): Promise<void> {
     if (link !== undefined) {
       updates.push('link = ?');
       values.push(link || null);
+    }
+    if (localLink !== undefined) {
+      updates.push('local_link = ?');
+      values.push(localLink || null);
     }
 
     if (updates.length === 0) {

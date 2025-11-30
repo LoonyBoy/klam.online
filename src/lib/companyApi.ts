@@ -1,7 +1,7 @@
 // Типы для работы с компаниями и приглашениями
 
-// API Base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || '${API_BASE_URL}';
+// API Base URL - пустая строка означает использование относительных путей (для Vite proxy)
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export interface Company {
   id: string;
@@ -264,6 +264,7 @@ export const companyApi = {
     deadline?: string;
     comment?: string;
     link?: string;
+    localLink?: string;
   }): Promise<any> {
     console.log('📤 Creating album:', { companyId, projectId, albumData });
     
@@ -311,6 +312,7 @@ export const companyApi = {
     deadline?: string;
     comment?: string;
     link?: string;
+    localLink?: string;
   }): Promise<any> {
     console.log('📤 Updating album:', { companyId, projectId, albumId, albumData });
     

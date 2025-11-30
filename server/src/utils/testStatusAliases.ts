@@ -66,6 +66,7 @@ console.log('\n📋 Test 6: Response formatting');
 console.log('-'.repeat(60));
 
 console.log('Success:', formatStatusChangeResponse('АР-001', 'accepted', true));
+console.log('Success with path:', formatStatusChangeResponse('АР-001', 'upload', true, 'D:\\Projects\\Albums'));
 console.log('Failure:', formatStatusChangeResponse('АР-001', 'accepted', false));
 
 // Тест 7: Проверка алиасов
@@ -109,6 +110,26 @@ const test10 = parseStatusCommands(longText);
 const end = Date.now();
 
 console.log(`Parsed ${test10.length} commands in ${end - start}ms`);
+
+// Тест 11: Парсинг путей к локальным папкам
+console.log('\n📋 Test 11: Local path parsing');
+console.log('-'.repeat(60));
+
+const test11a = parseStatusCommands('АР-1 выгружен D:\\EGSLibrary\\Projects');
+console.log('Input: "АР-1 выгружен D:\\EGSLibrary\\Projects"');
+console.log('Result:', JSON.stringify(test11a, null, 2));
+
+const test11b = parseStatusCommands('КР-002 загрузил C:/Users/Projects/Album');
+console.log('\nInput: "КР-002 загрузил C:/Users/Projects/Album"');
+console.log('Result:', JSON.stringify(test11b, null, 2));
+
+const test11c = parseStatusCommands('АР-003 выгрузка \\\\server\\share\\folder');
+console.log('\nInput: "АР-003 выгрузка \\\\\\\\server\\\\share\\\\folder"');
+console.log('Result:', JSON.stringify(test11c, null, 2));
+
+const test11d = parseStatusCommands('ЭС-1 ок');
+console.log('\nInput: "ЭС-1 ок" (no path)');
+console.log('Result:', JSON.stringify(test11d, null, 2));
 
 console.log('\n' + '='.repeat(60));
 console.log('✅ All tests completed!');

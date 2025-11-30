@@ -7,7 +7,7 @@ import { Building2, Users, AlertCircle, Loader2 } from 'lucide-react';
 import { TelegramLoginButton } from './TelegramLoginButton';
 
 // API Base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 interface InvitationInfo {
   companyName: string;

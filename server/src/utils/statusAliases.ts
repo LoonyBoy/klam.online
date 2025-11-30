@@ -199,7 +199,14 @@ export interface StatusChangeCommand {
   albumCode: string;
   statusCode: string;
   originalAlias: string;
+  localPath?: string; // Путь к локальной папке (если указан)
 }
+
+/**
+ * Регулярное выражение для поиска путей к папкам в тексте
+ * Поддерживает Windows пути: D:\folder, D:/folder, \\server\share, //server/share
+ */
+const LOCAL_PATH_PATTERN = /(?:[A-Za-z]:[\\/]|\\\\|\/\/)(?:[^\s<>:"\|\?\*]+)/gi;
 
 /**
  * Парсит текст сообщения и извлекает команды смены статуса
@@ -257,10 +264,19 @@ export function parseStatusCommands(text: string, validAlbumCodes?: string[]): S
     
     // Если нашли алиас статуса, добавляем команду
     if (foundStatusCode && foundAlias) {
+      // Ищем путь к локальной папке в тексте
+      const pathMatches = text.match(LOCAL_PATH_PATTERN);
+      const localPath = pathMatches && pathMatches.length > 0 ? pathMatches[0] : undefined;
+      
+      if (localPath) {
+        console.log(`[parseStatusCommands] Found local path: "${localPath}"`);
+      }
+      
       commands.push({
         albumCode,
         statusCode: foundStatusCode,
         originalAlias: foundAlias,
+        localPath,
       });
     } else {
       console.log(`[parseStatusCommands] No status alias found for album ${albumCode}`);
@@ -305,12 +321,14 @@ export function getAliasesForStatus(statusCode: string): string[] {
  * @param albumCode Код альбома
  * @param statusCode Код нового статуса
  * @param success Успешность операции
+ * @param localPath Путь к локальной папке (опционально)
  * @returns Текст ответа
  */
 export function formatStatusChangeResponse(
   albumCode: string,
   statusCode: string,
-  success: boolean
+  success: boolean,
+  localPath?: string
 ): string {
   const statusEmojis: Record<string, string> = {
     waiting: '⏳',
@@ -334,7 +352,11 @@ export function formatStatusChangeResponse(
   const name = statusNames[statusCode] || statusCode;
 
   if (success) {
-    return `${emoji} Альбом ${albumCode} → ${name}`;
+    let response = `${emoji} Альбом ${albumCode} → ${name}`;
+    if (localPath) {
+      response += `\n📂 Путь сохранён: ${localPath}`;
+    }
+    return response;
   } else {
     return `❌ Не удалось изменить статус альбома ${albumCode}`;
   }

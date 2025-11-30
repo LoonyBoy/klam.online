@@ -58,6 +58,7 @@ export interface Album {
   };
   comment?: string;
   albumLink?: string;
+  localLink?: string;
 }
 
 export interface Project {

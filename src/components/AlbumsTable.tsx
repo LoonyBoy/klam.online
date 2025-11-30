@@ -86,6 +86,7 @@ export function AlbumsTable({
     customer: '',
     deadline: '',
     albumLink: '',
+    localLink: '',
     comment: ''
   });
 
@@ -105,21 +106,31 @@ export function AlbumsTable({
     if (!companyId || !projectId) return;
 
     // Determine WebSocket URL based on environment
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    const isDevelopment = window.location.hostname === 'localhost';
+    const API_URL = import.meta.env.VITE_API_URL || '';
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isNgrok = hostname.includes('ngrok');
     
     let wsUrl: string;
-    if (isDevelopment) {
+    if (isLocalhost) {
       // Local development - connect directly to backend
       wsUrl = 'ws://localhost:3001/ws';
+    } else if (isNgrok) {
+      // Ngrok development - use current origin with wss and /ws path
+      // Vite proxy will handle /ws -> backend
+      wsUrl = `wss://${hostname}/ws`;
     } else if (API_URL.includes('https://api.klambot.ru')) {
       // Production - use WSS to API domain
       wsUrl = 'wss://api.klambot.ru/ws';
-    } else {
+    } else if (API_URL) {
       // Other environments - derive from API_URL
       const wsProtocol = API_URL.startsWith('https') ? 'wss:' : 'ws:';
       const apiHost = new URL(API_URL).host;
       wsUrl = `${wsProtocol}//${apiHost}/ws`;
+    } else {
+      // Fallback to current origin
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${wsProtocol}//${window.location.host}/ws`;
     }
     
     console.log('🔌 Attempting to connect to WebSocket:', wsUrl);
@@ -289,6 +300,7 @@ export function AlbumsTable({
         customer: '',
         deadline: '',
         albumLink: '',
+        localLink: '',
         comment: ''
       });
       setSelectedTemplate('');
@@ -343,7 +355,7 @@ export function AlbumsTable({
     return ['all', ...new Set(albums.map(a => a.executor?.name).filter(Boolean))];
   }, [albums]);
 
-  const statuses = ['all', 'Принято', 'На проверке', 'Замечания', 'В работе'];
+  const statuses = ['all', 'Выгрузка', 'Отправлено', 'Принято', 'Ожидание', 'Замечания', 'В производстве'];
 
   // Filter templates by project departments
   const filteredTemplates = useMemo(() => {
@@ -605,7 +617,7 @@ export function AlbumsTable({
                             onClick={() => {
                               if (onQuickAdd && quickAddData.name && quickAddData.code) {
                                 onQuickAdd(quickAddData);
-                                setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', comment: '' });
+                                setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', localLink: '', comment: '' });
                                 setSelectedTemplate('');
                                 setIsQuickAdding(false);
                               }
@@ -619,7 +631,7 @@ export function AlbumsTable({
                             variant="outline"
                             className="gap-2"
                             onClick={() => {
-                              setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', comment: '' });
+                              setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', localLink: '', comment: '' });
                               setSelectedTemplate('');
                               setIsQuickAdding(false);
                             }}
@@ -788,12 +800,24 @@ export function AlbumsTable({
 
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Ссылка на альбом
+                              Внешняя ссылка
                             </label>
                             <Input
                               placeholder="https://..."
                               value={quickAddData.albumLink}
                               onChange={(e) => setQuickAddData({...quickAddData, albumLink: e.target.value})}
+                              className="h-10"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Внутренняя ссылка (локальная папка)
+                            </label>
+                            <Input
+                              placeholder="C:\Projects\..."
+                              value={quickAddData.localLink}
+                              onChange={(e) => setQuickAddData({...quickAddData, localLink: e.target.value})}
                               className="h-10"
                             />
                           </div>
@@ -1192,15 +1216,23 @@ export function AlbumsTable({
                     {/* Ссылки */}
                     <td className="py-1 px-3" onClick={(e) => isEditMode && e.stopPropagation()}>
                       {isEditMode ? (
-                        <Input
-                          value={currentAlbum.albumLink || ''}
-                          onChange={(e) => updateField('albumLink', e.target.value)}
-                          placeholder="https://"
-                          className="h-7 text-xs"
-                        />
+                        <div className="space-y-1">
+                          <Input
+                            value={currentAlbum.albumLink || ''}
+                            onChange={(e) => updateField('albumLink', e.target.value)}
+                            placeholder="Внешняя ссылка https://..."
+                            className="h-7 text-xs"
+                          />
+                          <Input
+                            value={currentAlbum.localLink || ''}
+                            onChange={(e) => updateField('localLink', e.target.value)}
+                            placeholder="Локальная папка C:\..."
+                            className="h-7 text-xs"
+                          />
+                        </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          {album.albumLink ? (
+                          {album.albumLink && (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1214,10 +1246,36 @@ export function AlbumsTable({
                                     <ExternalLink className="w-4 h-4" />
                                   </a>
                                 </TooltipTrigger>
-                                <TooltipContent>Открыть альбом</TooltipContent>
+                                <TooltipContent>Открыть внешнюю ссылку</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                          ) : (
+                          )}
+                          {album.localLink && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <a 
+                                    href={`file:///${album.localLink.replace(/\\/g, '/')}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // Копируем путь в буфер обмена
+                                      navigator.clipboard.writeText(album.localLink);
+                                      toast.success('Путь скопирован в буфер обмена');
+                                    }}
+                                    className="text-[#64748B] hover:text-[#F59E0B] transition-colors inline-block cursor-pointer"
+                                  >
+                                    <FolderOpen className="w-4 h-4" />
+                                  </a>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <div>Локальная папка</div>
+                                  <div className="text-xs text-gray-400">{album.localLink}</div>
+                                  <div className="text-xs">Клик = копировать путь</div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          {!album.albumLink && !album.localLink && (
                             <span className="text-gray-400 text-xs">—</span>
                           )}
                         </div>
@@ -1289,7 +1347,7 @@ export function AlbumsTable({
                             onClick={() => {
                               if (onQuickAdd && quickAddData.name && quickAddData.code) {
                                 onQuickAdd(quickAddData);
-                                setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', comment: '' });
+                                setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', localLink: '', comment: '' });
                                 setSelectedTemplate('');
                                 setIsQuickAdding(false);
                               }
@@ -1303,7 +1361,7 @@ export function AlbumsTable({
                             variant="outline"
                             className="gap-2"
                             onClick={() => {
-                              setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', comment: '' });
+                              setQuickAddData({ name: '', code: '', department: '', executor: '', deadline: '', albumLink: '', localLink: '', comment: '' });
                               setSelectedTemplate('');
                               setIsQuickAdding(false);
                             }}
@@ -1474,13 +1532,25 @@ export function AlbumsTable({
                           
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Ссылка на альбом
+                              Внешняя ссылка
                             </label>
                             <Input
                               type="url"
                               placeholder="https://drive.google.com/..."
                               value={quickAddData.albumLink}
                               onChange={(e) => setQuickAddData({...quickAddData, albumLink: e.target.value})}
+                              className="h-10"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Внутренняя ссылка (локальная папка)
+                            </label>
+                            <Input
+                              placeholder="C:\Projects\..."
+                              value={quickAddData.localLink}
+                              onChange={(e) => setQuickAddData({...quickAddData, localLink: e.target.value})}
                               className="h-10"
                             />
                           </div>

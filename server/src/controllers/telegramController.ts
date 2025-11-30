@@ -25,26 +25,60 @@ export async function checkTelegramChannel(req: Request, res: Response) {
       });
     }
 
+    // Проверяем тип ссылки
+    const trimmedUrl = channelUrl.trim();
+    
+    // Если это invite-ссылка (t.me/+ или t.me/joinchat/) - нельзя проверить без chat_id
+    const isInviteLink = /t\.me\/(\+|joinchat\/)/.test(trimmedUrl);
+    
+    if (isInviteLink) {
+      // Для invite-ссылок возвращаем успех - проверить нельзя, но ссылка валидна
+      console.log('🔗 Invite link detected, skipping verification:', trimmedUrl);
+      return res.json({
+        success: true,
+        isInviteLink: true,
+        message: 'Invite-ссылка принята. Убедитесь, что бот добавлен в канал как администратор.',
+        channel: {
+          inviteLink: trimmedUrl
+        }
+      });
+    }
+
     // Извлекаем chat_id из разных форматов URL
-    let chatId: string | number = channelUrl.trim();
+    let chatId: string | number = trimmedUrl;
 
     // Если это web.telegram.org URL, извлекаем ID
-    if (channelUrl.includes('web.telegram.org')) {
-      const match = channelUrl.match(/#(-?\d+)/);
+    if (trimmedUrl.includes('web.telegram.org')) {
+      const match = trimmedUrl.match(/#(-?\d+)/);
       if (match) {
         chatId = match[1];
       }
     }
-    // Если это t.me URL с username
-    else if (channelUrl.includes('t.me/')) {
-      const match = channelUrl.match(/t\.me\/([^/?]+)/);
+    // Если это t.me URL с username (публичный канал)
+    else if (trimmedUrl.includes('t.me/')) {
+      const match = trimmedUrl.match(/t\.me\/([a-zA-Z][a-zA-Z0-9_]{3,})/);
       if (match) {
         chatId = '@' + match[1];
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: 'Неверный формат ссылки'
+        });
       }
     }
-    // Если это просто число
-    else if (/^-?\d+$/.test(channelUrl)) {
-      chatId = channelUrl;
+    // Если это просто число (chat_id)
+    else if (/^-?\d+$/.test(trimmedUrl)) {
+      chatId = trimmedUrl;
+    }
+    // Если это @username
+    else if (/^@[a-zA-Z][a-zA-Z0-9_]{3,}$/.test(trimmedUrl)) {
+      chatId = trimmedUrl;
+    }
+    else {
+      return res.status(400).json({
+        success: false,
+        error: 'Неверный формат ссылки или ID канала'
+      });
     }
 
     console.log('🔍 Checking Telegram channel:', { original: channelUrl, parsed: chatId });

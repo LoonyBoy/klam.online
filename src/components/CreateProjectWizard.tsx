@@ -202,6 +202,29 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
   };
 
   // Управление отделами
+  const toggleDepartment = (code: string) => {
+    const existingDept = departments.find(d => d.code === code);
+    if (existingDept) {
+      // Удаляем отдел
+      setDepartments(departments.filter(d => d.code !== code));
+      // Удаляем пользователей из этого отдела
+      setUsers(users.filter(u => u.departmentId !== existingDept.id));
+    } else {
+      // Добавляем отдел
+      const deptInfo = AVAILABLE_DEPARTMENTS.find(d => d.code === code);
+      if (deptInfo) {
+        setDepartments([
+          ...departments,
+          {
+            id: Date.now().toString(),
+            name: deptInfo.name,
+            code: deptInfo.code,
+          },
+        ]);
+      }
+    }
+  };
+
   const addDepartment = () => {
     const selectedDepartment = AVAILABLE_DEPARTMENTS.find(d => d.code === selectedDepartmentCode);
     if (selectedDepartment) {
@@ -423,7 +446,7 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
 
   const checkConnection = async () => {
     if (!channelUrl.trim()) {
-      toast.error('Введите URL канала или ID беседы');
+      toast.error('Введите ID канала');
       return;
     }
 
@@ -434,42 +457,40 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
     toast.dismiss();
 
     try {
-      // Реальная проверка через Telegram Bot API
-      const result = await checkTelegramChannel(channelUrl);
+      const value = channelUrl.trim();
       
-      console.log('Результат проверки канала:', result);
-      
-      if (result.success) {
-        setConnectionStatus('success');
+      // Проверяем формат chat_id (число, обычно отрицательное для групп/каналов)
+      if (/^-?\d+$/.test(value)) {
+        // Это chat_id - проверяем через API
+        const result = await checkTelegramChannel(value);
         
-        // Если есть предупреждение (бот не админ), показываем его
-        if (result.warning) {
-          toast.warning(result.warning, {
-            duration: 6000,
-          });
-        } else {
-          toast.success(`Соединение установлено! Канал: ${result.channel.title}`);
-        }
-      } else {
-        setConnectionStatus('error');
+        console.log('Результат проверки канала:', result);
         
-        // Если бот не является администратором
-        if (result.needsAdmin) {
-          const errorMsg = result.message || 'Пожалуйста, сделайте бота администратором канала и нажмите "Проверить соединение" снова';
-          const channelTitle = result.channel?.title || 'Неизвестно';
-          setConnectionErrorMessage(errorMsg);
-          setConnectionChannelTitle(channelTitle);
-          toast.error(`${errorMsg}\n\nКанал: ${channelTitle}`, { duration: 8000 });
+        if (result.success) {
+          setConnectionStatus('success');
+          if (result.channel?.title) {
+            toast.success(`Канал найден: ${result.channel.title}`);
+          } else {
+            toast.success('ID канала принят');
+          }
         } else {
-          const errorMsg = result.error || 'Не удалось проверить канал';
+          setConnectionStatus('error');
+          const errorMsg = result.error || 'Бот не найден в этом канале. Сначала добавьте бота в канал.';
           setConnectionErrorMessage(errorMsg);
           setConnectionChannelTitle('');
           toast.error(errorMsg);
         }
+      } else {
+        // Неверный формат
+        setConnectionStatus('error');
+        const errorMsg = 'Неверный формат ID. Введите числовой ID канала (например: -1001234567890)';
+        setConnectionErrorMessage(errorMsg);
+        setConnectionChannelTitle('');
+        toast.error(errorMsg);
       }
     } catch (error: any) {
       console.error('Ошибка проверки канала (catch):', error);
-      const errorMsg = 'Не удалось установить соединение. Проверьте правильность URL и убедитесь, что бот добавлен в канал.';
+      const errorMsg = 'Не удалось проверить канал. Попробуйте ещё раз.';
       setConnectionStatus('error');
       setConnectionErrorMessage(errorMsg);
       setConnectionChannelTitle('');
@@ -570,61 +591,50 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
           {currentStep === 2 && (
             <div className="space-y-6">
               <div className="space-y-4">
-                <div className="flex gap-2">
-                  <Select value={selectedDepartmentCode} onValueChange={setSelectedDepartmentCode}>
-                    <SelectTrigger id="department-code" className="flex-1">
-                      <SelectValue placeholder="Выберите отдел">
-                        {selectedDepartmentCode && (
-                          <span className="truncate">
-                            {AVAILABLE_DEPARTMENTS.find(d => d.code === selectedDepartmentCode)?.code || ''}
-                          </span>
-                        )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AVAILABLE_DEPARTMENTS.filter(
-                        dept => !departments.some(d => d.code === dept.code)
-                      ).map((dept) => (
-                        <SelectItem key={dept.code} value={dept.code}>
-                          {dept.name} ({dept.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={addDepartment} className="gap-2 flex-shrink-0">
-                    <Plus className="w-4 h-4" />
-                    Добавить
-                  </Button>
+                <p className="text-sm text-gray-600">
+                  Выберите отделы, которые будут участвовать в проекте
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {AVAILABLE_DEPARTMENTS.map((dept) => {
+                    const isSelected = departments.some(d => d.code === dept.code);
+                    return (
+                      <label
+                        key={dept.code}
+                        className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'border-blue-500 bg-blue-50' 
+                            : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleDepartment(dept.code)}
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900">{dept.name}</div>
+                          <div className="text-sm text-gray-500">{dept.code}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
 
-                {departments.length === 0 ? (
+                {departments.length === 0 && (
                   <Alert>
                     <Info className="w-4 h-4" />
                     <AlertDescription>
-                      Добавьте хотя бы один отдел для продолжения
+                      Выберите хотя бы один отдел для продолжения
                     </AlertDescription>
                   </Alert>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-sm text-gray-600">Добавлено отделов: {departments.length}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {departments.map((dept) => (
-                        <div
-                          key={dept.id}
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
-                        >
-                          <span>{dept.name} ({dept.code})</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeDepartment(dept.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                )}
+
+                {departments.length > 0 && (
+                  <p className="text-sm text-green-600 font-medium">
+                    ✓ Выбрано отделов: {departments.length}
+                  </p>
                 )}
               </div>
             </div>
@@ -865,10 +875,9 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
                 <AlertDescription className="text-blue-900">
                   <p className="font-medium mb-2">Инструкция по подключению бота:</p>
                   <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>Создайте канал в Telegram для проекта</li>
+                    <li>Создайте канал или группу в Telegram для проекта</li>
                     <li>Пригласите бота <strong>@klamonline_bot</strong> в канал</li>
-                    <li>Сделайте бота администратором канала</li>
-                    <li>Скопируйте URL-ссылку канала и вставьте ниже</li>
+                    <li>Бот отправит ID канала — скопируйте его и вставьте ниже</li>
                   </ol>
                 </AlertDescription>
               </Alert>
@@ -902,16 +911,16 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
 
               <div className="space-y-2">
                 <Label htmlFor="channel-url">
-                  URL-ссылка на канал или ID беседы <span className="text-red-500">*</span>
+                  ID Telegram-канала <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="channel-url"
-                  placeholder="https://t.me/your_channel или -5078073427"
+                  placeholder="-1001234567890"
                   value={channelUrl}
                   onChange={(e) => setChannelUrl(e.target.value)}
                 />
                 <p className="text-xs text-gray-500">
-                  Пример: https://t.me/project_channel, https://web.telegram.org/a/#-5078073427 или просто -5078073427
+                  Вставьте ID, который бот отправил в канал после добавления
                 </p>
               </div>
 
