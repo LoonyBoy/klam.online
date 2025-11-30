@@ -33,7 +33,33 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
   const [projectToDelete, setProjectToDelete] = useState<any>(null);
 
   useEffect(() => {
-    loadProjects();
+    let isMounted = true;
+    
+    const loadData = async () => {
+      try {
+        const companyId = localStorage.getItem('companyId');
+        if (!companyId) {
+          console.error('❌ No company ID found');
+          if (isMounted) setIsLoading(false);
+          return;
+        }
+
+        const response = await companyApi.getCompanyProjects(companyId);
+        if (isMounted) {
+          setProjects(response.projects || []);
+        }
+      } catch (error) {
+        console.error('❌ Failed to load projects:', error);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    
+    loadData();
+    
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const loadProjects = async () => {
@@ -41,7 +67,6 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
       const companyId = localStorage.getItem('companyId');
       if (!companyId) {
         console.error('❌ No company ID found');
-        setIsLoading(false);
         return;
       }
 
@@ -49,8 +74,6 @@ export function ProjectsList({ onNavigateToProject }: ProjectsListProps) {
       setProjects(response.projects || []);
     } catch (error) {
       console.error('❌ Failed to load projects:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 

@@ -63,6 +63,12 @@ router.post('/:companyId/projects', authenticateToken, projectController.createP
 // Удалить проект (требует аутентификацию)
 router.delete('/:companyId/projects/:projectId', authenticateToken, projectController.deleteProject);
 
+// Добавить участника в проект (требует аутентификацию)
+router.post('/:companyId/projects/:projectId/participants', authenticateToken, projectController.addParticipantToProject);
+
+// Удалить участника из проекта (требует аутентификацию)
+router.delete('/:companyId/projects/:projectId/participants/:participantId', authenticateToken, projectController.removeParticipantFromProject);
+
 // Получить статистику по альбомам компании (требует аутентификацию)
 router.get('/:companyId/albums/statistics', authenticateToken, albumController.getAlbumsStatistics);
 

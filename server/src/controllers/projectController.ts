@@ -773,3 +773,171 @@ export async function updateProjectStatus(req: Request, res: Response) {
     });
   }
 }
+
+/**
+ * POST /api/companies/:companyId/projects/:projectId/participants
+ * Добавить участника в проект
+ */
+export async function addParticipantToProject(req: Request, res: Response) {
+  try {
+    const { companyId, projectId } = req.params;
+    const { participantId, roleProject = 'member' } = req.body;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized'
+      });
+    }
+
+    if (!participantId) {
+      return res.status(400).json({
+        success: false,
+        error: 'participantId is required'
+      });
+    }
+
+    console.log('📥 Добавление участника в проект:', { companyId, projectId, participantId, roleProject });
+
+    // Проверяем, что пользователь является членом компании
+    const [userCompanies] = await pool.query<RowDataPacket[]>(
+      `SELECT cu.role_in_company
+       FROM company_users cu
+       WHERE cu.company_id = ? AND cu.user_id = ?`,
+      [companyId, userId]
+    );
+
+    if (userCompanies.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    // Проверяем, что проект принадлежит компании
+    const [projects] = await pool.query<RowDataPacket[]>(
+      `SELECT id FROM projects WHERE id = ? AND company_id = ?`,
+      [projectId, companyId]
+    );
+
+    if (projects.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found'
+      });
+    }
+
+    // Проверяем, что участник принадлежит компании
+    const [participants] = await pool.query<RowDataPacket[]>(
+      `SELECT id FROM participants WHERE id = ? AND company_id = ?`,
+      [participantId, companyId]
+    );
+
+    if (participants.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Participant not found in this company'
+      });
+    }
+
+    // Проверяем, не добавлен ли уже участник
+    const [existing] = await pool.query<RowDataPacket[]>(
+      `SELECT id FROM project_participants WHERE project_id = ? AND participant_id = ?`,
+      [projectId, participantId]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Participant already added to this project'
+      });
+    }
+
+    // Добавляем участника в проект
+    await pool.query(
+      `INSERT INTO project_participants (project_id, participant_id, role_project, added_by, created_at)
+       VALUES (?, ?, ?, ?, NOW())`,
+      [projectId, participantId, roleProject, userId]
+    );
+
+    console.log(`✅ Участник ${participantId} добавлен в проект ${projectId}`);
+
+    res.json({
+      success: true,
+      message: 'Participant added to project successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error in addParticipantToProject:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to add participant to project',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+/**
+ * DELETE /api/companies/:companyId/projects/:projectId/participants/:participantId
+ * Удалить участника из проекта
+ */
+export async function removeParticipantFromProject(req: Request, res: Response) {
+  try {
+    const { companyId, projectId, participantId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized'
+      });
+    }
+
+    console.log('📥 Удаление участника из проекта:', { companyId, projectId, participantId });
+
+    // Проверяем, что пользователь является членом компании
+    const [userCompanies] = await pool.query<RowDataPacket[]>(
+      `SELECT cu.role_in_company
+       FROM company_users cu
+       WHERE cu.company_id = ? AND cu.user_id = ?`,
+      [companyId, userId]
+    );
+
+    if (userCompanies.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    // Удаляем участника из проекта
+    const [result] = await pool.query<any>(
+      `DELETE FROM project_participants 
+       WHERE project_id = ? AND participant_id = ?`,
+      [projectId, participantId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Participant not found in this project'
+      });
+    }
+
+    console.log(`✅ Участник ${participantId} удалён из проекта ${projectId}`);
+
+    res.json({
+      success: true,
+      message: 'Participant removed from project successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error in removeParticipantFromProject:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove participant from project',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+}

@@ -15,9 +15,7 @@ import { Sections } from './components/Sections';
 import { Sidebar } from './components/Sidebar';
 import { InvitePage } from './components/InvitePage';
 import { TelegramAuthCallback } from './components/TelegramAuthCallback';
-
-// API Base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { Toaster } from './components/ui/sonner';
 
 export type Page = 'landing' | 'login' | 'onboarding' | 'dashboard' | 'projects' | 'project' | 'album' | 'albums-view' | 'users' | 'settings' | 'reports' | 'sections';
 
@@ -456,53 +454,56 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar 
-        currentPage={currentPage} 
-        onNavigate={setCurrentPage}
-        onLogout={handleLogout}
-      />
-      
-      <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
-        {currentPage === 'dashboard' && (
-          <Dashboard onNavigateToProject={navigateToProject} />
-        )}
-        {currentPage === 'projects' && (
-          <ProjectsList onNavigateToProject={navigateToProject} />
-        )}
-        {currentPage === 'project' && selectedProjectId && (
-          <ProjectCard 
-            projectId={selectedProjectId} 
-            onNavigateToAlbum={navigateToAlbum}
-            onNavigateToAlbumsView={navigateToAlbumsView}
-            onBack={() => setCurrentPage('projects')}
-          />
-        )}
-        {currentPage === 'album' && selectedAlbumId && (
-          <AlbumCard 
-            albumId={selectedAlbumId}
-            onBack={() => setCurrentPage('project')}
-          />
-        )}
-        {currentPage === 'albums-view' && selectedProjectId && (
-          <AlbumsView 
-            projectId={selectedProjectId}
-            projectName={selectedProjectName}
-            category={selectedCategory}
-            onAlbumClick={navigateToAlbum}
-            onBack={() => setCurrentPage('project')}
-          />
-        )}
-        {currentPage === 'users' && <Users />}
-        {currentPage === 'settings' && <Settings />}
-        {currentPage === 'sections' && <Sections />}
-        {currentPage === 'reports' && (
-          <Reports 
-            onNavigateToProject={navigateToProject}
-            onNavigateToAlbum={navigateToAlbum}
-          />
-        )}
-      </main>
-    </div>
+    <>
+      <div className="flex h-screen bg-gray-50">
+        <Sidebar 
+          currentPage={currentPage} 
+          onNavigate={setCurrentPage}
+          onLogout={handleLogout}
+        />
+        
+        <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
+          {currentPage === 'dashboard' && (
+            <Dashboard onNavigateToProject={navigateToProject} />
+          )}
+          {currentPage === 'projects' && (
+            <ProjectsList onNavigateToProject={navigateToProject} />
+          )}
+          {currentPage === 'project' && selectedProjectId && (
+            <ProjectCard 
+              projectId={selectedProjectId} 
+              onNavigateToAlbum={navigateToAlbum}
+              onNavigateToAlbumsView={navigateToAlbumsView}
+              onBack={() => setCurrentPage('projects')}
+            />
+          )}
+          {currentPage === 'album' && selectedAlbumId && (
+            <AlbumCard 
+              albumId={selectedAlbumId}
+              onBack={() => setCurrentPage('project')}
+            />
+          )}
+          {currentPage === 'albums-view' && selectedProjectId && (
+            <AlbumsView 
+              projectId={selectedProjectId}
+              projectName={selectedProjectName}
+              category={selectedCategory}
+              onAlbumClick={navigateToAlbum}
+              onBack={() => setCurrentPage('project')}
+            />
+          )}
+          {currentPage === 'users' && <Users />}
+          {currentPage === 'settings' && <Settings />}
+          {currentPage === 'sections' && <Sections />}
+          {currentPage === 'reports' && (
+            <Reports 
+              onNavigateToProject={navigateToProject}
+              onNavigateToAlbum={navigateToAlbum}
+            />
+          )}
+        </main>
+      </div>
+      <Toaster />
+    </>
   );
 }

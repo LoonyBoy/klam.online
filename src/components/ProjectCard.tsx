@@ -4,7 +4,9 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Label } from './ui/label';
+import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { 
   ArrowLeft, 
   ExternalLink, 
@@ -20,12 +22,26 @@ import {
   Trash2,
   Play,
   Pause,
-  Archive
+  Archive,
+  UserPlus
 } from 'lucide-react';
 import { mockEvents } from '../lib/mockData';
-import { User as UserType } from '../App';
 import { toast } from 'sonner';
-import { companyApi } from '../lib/companyApi';
+import { companyApi, addParticipant, getDepartments, addParticipantToProject, removeParticipantFromProject } from '../lib/companyApi';
+
+// Локальный интерфейс для участников проекта
+interface ProjectParticipant {
+  id: string;
+  participantId?: number;
+  name: string;
+  email?: string;
+  telegramId?: string;
+  telegramUsername?: string;
+  department: string;
+  departmentId?: string;
+  departmentCode?: string;
+  role: 'executor' | 'client';
+}
 
 interface ProjectCardProps {
   projectId: string;
@@ -51,8 +67,8 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   
   // Состояния для управления пользователями
-  const [executors, setExecutors] = useState<UserType[]>([]);
-  const [clients, setClients] = useState<UserType[]>([]);
+  const [executors, setExecutors] = useState<ProjectParticipant[]>([]);
+  const [clients, setClients] = useState<ProjectParticipant[]>([]);
   
   // Состояния для диалогов добавления пользователей
   const [isAddExecutorOpen, setIsAddExecutorOpen] = useState(false);
@@ -63,9 +79,17 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   const [availableClients, setAvailableClients] = useState<any[]>([]);
   const [isLoadingParticipants, setIsLoadingParticipants] = useState(false);
   
-  // Форма добавления пользователя
+  // Форма добавления пользователя из списка
   const [selectedParticipantId, setSelectedParticipantId] = useState('');
-
+  
+  // Форма создания нового пользователя
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [newUserFirstName, setNewUserFirstName] = useState('');
+  const [newUserLastName, setNewUserLastName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserTelegram, setNewUserTelegram] = useState('');
+  const [newUserDepartment, setNewUserDepartment] = useState('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
   // Загрузка данных проекта при монтировании компонента
   useEffect(() => {
     loadProjectDetails();
@@ -162,18 +186,28 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         return;
       }
 
-      const response = await companyApi.getCompanyParticipants(companyId);
+      const participants = await companyApi.getCompanyParticipants(companyId);
       
-      if (response.success && response.participants) {
+      // API возвращает массив участников напрямую
+      if (Array.isArray(participants)) {
         // Фильтруем участников, которые ещё не добавлены в проект
-        const currentExecutorIds = executors.map(e => e.id);
-        const currentClientIds = clients.map(c => c.id);
+        // Используем participantId для сравнения (это ID из таблицы participants)
+        const currentExecutorIds = executors.map(e => e.participantId?.toString() || e.id);
+        const currentClientIds = clients.map(c => c.participantId?.toString() || c.id);
         
-        const executorsList = response.participants
+        const executorsList = participants
           .filter((p: any) => p.roleType === 'executor' && !currentExecutorIds.includes(p.id.toString()));
         
-        const clientsList = response.participants
+        const clientsList = participants
           .filter((p: any) => p.roleType === 'customer' && !currentClientIds.includes(p.id.toString()));
+        
+        console.log('📊 Available participants:', {
+          total: participants.length,
+          executors: executorsList.length,
+          clients: clientsList.length,
+          currentExecutorIds,
+          currentClientIds
+        });
         
         setAvailableExecutors(executorsList);
         setAvailableClients(clientsList);
@@ -183,6 +217,119 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       toast.error('Не удалось загрузить список участников');
     } finally {
       setIsLoadingParticipants(false);
+    }
+  };
+
+  // Загрузка списка отделов для формы создания
+  const loadDepartments = async () => {
+    try {
+      const response = await getDepartments();
+      if (response.departments) {
+        setDepartments(response.departments);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load departments:', error);
+    }
+  };
+
+  // Сброс формы создания нового пользователя
+  const resetNewUserForm = () => {
+    setNewUserFirstName('');
+    setNewUserLastName('');
+    setNewUserEmail('');
+    setNewUserTelegram('');
+    setNewUserDepartment('');
+  };
+
+  // Создание нового исполнителя и добавление в проект
+  const handleCreateExecutor = async () => {
+    if (!newUserFirstName.trim()) {
+      toast.error('Введите имя');
+      return;
+    }
+
+    try {
+      setIsCreatingUser(true);
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Не удалось определить компанию');
+        return;
+      }
+
+      // Находим отдел по коду
+      const department = departments.find(d => d.code === newUserDepartment);
+
+      // Создаём участника
+      const result = await addParticipant(companyId, {
+        firstName: newUserFirstName.trim(),
+        lastName: newUserLastName.trim(),
+        email: newUserEmail.trim() || undefined,
+        telegramUsername: newUserTelegram.trim().replace('@', '') || undefined,
+        roleType: 'executor',
+        departmentId: department?.id
+      });
+
+      if (result.success && result.participantId) {
+        // Добавляем созданного участника в проект
+        await addParticipantToProject(companyId, projectId, result.participantId);
+        
+        toast.success('Исполнитель создан и добавлен в проект');
+        resetNewUserForm();
+        setIsAddExecutorOpen(false);
+        
+        await loadProjectDetails();
+      }
+    } catch (error: any) {
+      console.error('❌ Error creating executor:', error);
+      toast.error(error.message || 'Не удалось создать исполнителя');
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
+  // Создание нового заказчика и добавление в проект
+  const handleCreateClient = async () => {
+    if (!newUserFirstName.trim()) {
+      toast.error('Введите имя');
+      return;
+    }
+
+    try {
+      setIsCreatingUser(true);
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) {
+        toast.error('Не удалось определить компанию');
+        return;
+      }
+
+      // Находим отдел по коду
+      const department = departments.find(d => d.code === newUserDepartment);
+
+      // Создаём участника
+      const result = await addParticipant(companyId, {
+        firstName: newUserFirstName.trim(),
+        lastName: newUserLastName.trim(),
+        email: newUserEmail.trim() || undefined,
+        telegramUsername: newUserTelegram.trim().replace('@', '') || undefined,
+        roleType: 'customer',
+        departmentId: department?.id
+      });
+
+      if (result.success && result.participantId) {
+        // Добавляем созданного участника в проект
+        await addParticipantToProject(companyId, projectId, result.participantId);
+        
+        toast.success('Заказчик создан и добавлен в проект');
+        resetNewUserForm();
+        setIsAddClientOpen(false);
+        
+        await loadProjectDetails();
+      }
+    } catch (error: any) {
+      console.error('❌ Error creating client:', error);
+      toast.error(error.message || 'Не удалось создать заказчика');
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -239,8 +386,8 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         return;
       }
 
-      // TODO: Добавить API для добавления участника в проект
-      // await companyApi.addParticipantToProject(companyId, projectId, selectedParticipantId);
+      // Добавляем участника в проект
+      await addParticipantToProject(companyId, projectId, parseInt(selectedParticipantId));
       
       toast.success('Исполнитель добавлен');
       setIsAddExecutorOpen(false);
@@ -248,9 +395,9 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       
       // Перезагружаем данные проекта
       await loadProjectDetails();
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error adding executor:', error);
-      toast.error('Не удалось добавить исполнителя');
+      toast.error(error.message || 'Не удалось добавить исполнителя');
     }
   };
 
@@ -267,8 +414,8 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         return;
       }
 
-      // TODO: Добавить API для добавления участника в проект
-      // await companyApi.addParticipantToProject(companyId, projectId, selectedParticipantId);
+      // Добавляем участника в проект
+      await addParticipantToProject(companyId, projectId, parseInt(selectedParticipantId));
       
       toast.success('Заказчик добавлен');
       setIsAddClientOpen(false);
@@ -276,7 +423,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       
       // Перезагружаем данные проекта
       await loadProjectDetails();
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error adding client:', error);
       toast.error('Не удалось добавить заказчика');
     }
@@ -290,14 +437,15 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         return;
       }
 
-      await companyApi.deleteParticipant(companyId, id);
-      toast.success('Исполнитель удалён из всех проектов');
+      // Удаляем участника из проекта, а не из компании
+      await removeParticipantFromProject(companyId, projectId, parseInt(id));
+      toast.success('Исполнитель удалён из проекта');
       
       // Перезагружаем данные проекта
       await loadProjectDetails();
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error removing executor:', error);
-      toast.error('Не удалось удалить исполнителя');
+      toast.error(error.message || 'Не удалось удалить исполнителя');
     }
   };
 
@@ -309,14 +457,15 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         return;
       }
 
-      await companyApi.deleteParticipant(companyId, id);
-      toast.success('Заказчик удалён из всех проектов');
+      // Удаляем участника из проекта, а не из компании
+      await removeParticipantFromProject(companyId, projectId, parseInt(id));
+      toast.success('Заказчик удалён из проекта');
       
       // Перезагружаем данные проекта
       await loadProjectDetails();
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error removing client:', error);
-      toast.error('Не удалось удалить заказчика');
+      toast.error(error.message || 'Не удалось удалить заказчика');
     }
   };
 
@@ -597,72 +746,169 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         setIsAddExecutorOpen(open);
         if (open) {
           loadAvailableParticipants();
+          loadDepartments();
         } else {
           setSelectedParticipantId('');
+          resetNewUserForm();
         }
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Добавить исполнителя</DialogTitle>
             <DialogDescription>
-              Выберите исполнителя из списка участников компании
+              Выберите из списка или создайте нового
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {isLoadingParticipants ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-sm text-gray-500 mt-2">Загрузка...</p>
+          
+          <Tabs defaultValue="existing" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="existing" className="gap-2">
+                <UsersIcon className="w-4 h-4" />
+                Из списка
+              </TabsTrigger>
+              <TabsTrigger value="new" className="gap-2">
+                <UserPlus className="w-4 h-4" />
+                Создать
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="existing" className="space-y-4 py-4">
+              {isLoadingParticipants ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-sm text-gray-500 mt-2">Загрузка...</p>
+                </div>
+              ) : availableExecutors.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <UsersIcon className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Нет доступных исполнителей</p>
+                  <p className="text-xs mt-1">Создайте нового во вкладке "Создать"</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Выберите исполнителя *</Label>
+                  <Select value={selectedParticipantId} onValueChange={setSelectedParticipantId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Выберите из списка" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableExecutors.map((participant: any) => (
+                        <SelectItem key={participant.id} value={participant.id.toString()}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {participant.firstName} {participant.lastName}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {participant.email} {participant.department?.name ? `• ${participant.department.name}` : ''}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => { 
+                    setIsAddExecutorOpen(false); 
+                    setSelectedParticipantId('');
+                  }} 
+                  className="flex-1"
+                >
+                  Отмена
+                </Button>
+                <Button 
+                  onClick={handleAddExecutor} 
+                  className="flex-1"
+                  disabled={!selectedParticipantId || isLoadingParticipants}
+                >
+                  Добавить
+                </Button>
               </div>
-            ) : availableExecutors.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <UsersIcon className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Нет доступных исполнителей</p>
+            </TabsContent>
+
+            <TabsContent value="new" className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="exec-first-name">Имя *</Label>
+                  <Input
+                    id="exec-first-name"
+                    placeholder="Иван"
+                    value={newUserFirstName}
+                    onChange={(e) => setNewUserFirstName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exec-last-name">Фамилия</Label>
+                  <Input
+                    id="exec-last-name"
+                    placeholder="Иванов"
+                    value={newUserLastName}
+                    onChange={(e) => setNewUserLastName(e.target.value)}
+                  />
+                </div>
               </div>
-            ) : (
+              
               <div className="space-y-2">
-                <Label>Выберите исполнителя *</Label>
-                <Select value={selectedParticipantId} onValueChange={setSelectedParticipantId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Выберите из списка" />
+                <Label htmlFor="exec-email">Email</Label>
+                <Input
+                  id="exec-email"
+                  type="email"
+                  placeholder="ivan@company.ru"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="exec-telegram">Telegram</Label>
+                <Input
+                  id="exec-telegram"
+                  placeholder="@username"
+                  value={newUserTelegram}
+                  onChange={(e) => setNewUserTelegram(e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="exec-department">Отдел</Label>
+                <Select value={newUserDepartment} onValueChange={setNewUserDepartment}>
+                  <SelectTrigger id="exec-department">
+                    <SelectValue placeholder="Выберите отдел" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableExecutors.map((participant: any) => (
-                      <SelectItem key={participant.id} value={participant.id.toString()}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {participant.firstName} {participant.lastName}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {participant.email} {participant.departmentName ? `• ${participant.departmentName}` : ''}
-                          </span>
-                        </div>
+                    {departments.map((dept: any) => (
+                      <SelectItem key={dept.id} value={dept.code}>
+                        {dept.name} ({dept.code})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
-          </div>
-          <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              onClick={() => { 
-                setIsAddExecutorOpen(false); 
-                setSelectedParticipantId('');
-              }} 
-              className="flex-1"
-            >
-              Отмена
-            </Button>
-            <Button 
-              onClick={handleAddExecutor} 
-              className="flex-1"
-              disabled={!selectedParticipantId || isLoadingParticipants}
-            >
-              Добавить
-            </Button>
-          </div>
+              
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => { 
+                    setIsAddExecutorOpen(false); 
+                    resetNewUserForm();
+                  }} 
+                  className="flex-1"
+                >
+                  Отмена
+                </Button>
+                <Button 
+                  onClick={handleCreateExecutor} 
+                  className="flex-1"
+                  disabled={!newUserFirstName.trim() || isCreatingUser}
+                >
+                  {isCreatingUser ? 'Создание...' : 'Создать'}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
@@ -671,72 +917,169 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         setIsAddClientOpen(open);
         if (open) {
           loadAvailableParticipants();
+          loadDepartments();
         } else {
           setSelectedParticipantId('');
+          resetNewUserForm();
         }
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Добавить заказчика</DialogTitle>
             <DialogDescription>
-              Выберите заказчика из списка участников компании
+              Выберите из списка или создайте нового
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {isLoadingParticipants ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-                <p className="text-sm text-gray-500 mt-2">Загрузка...</p>
+          
+          <Tabs defaultValue="existing" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="existing" className="gap-2">
+                <User className="w-4 h-4" />
+                Из списка
+              </TabsTrigger>
+              <TabsTrigger value="new" className="gap-2">
+                <UserPlus className="w-4 h-4" />
+                Создать
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="existing" className="space-y-4 py-4">
+              {isLoadingParticipants ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                  <p className="text-sm text-gray-500 mt-2">Загрузка...</p>
+                </div>
+              ) : availableClients.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <User className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Нет доступных заказчиков</p>
+                  <p className="text-xs mt-1">Создайте нового во вкладке "Создать"</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Выберите заказчика *</Label>
+                  <Select value={selectedParticipantId} onValueChange={setSelectedParticipantId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Выберите из списка" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableClients.map((participant: any) => (
+                        <SelectItem key={participant.id} value={participant.id.toString()}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {participant.firstName} {participant.lastName}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {participant.email} {participant.department?.name ? `• ${participant.department.name}` : ''}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => { 
+                    setIsAddClientOpen(false); 
+                    setSelectedParticipantId('');
+                  }} 
+                  className="flex-1"
+                >
+                  Отмена
+                </Button>
+                <Button 
+                  onClick={handleAddClient} 
+                  className="flex-1"
+                  disabled={!selectedParticipantId || isLoadingParticipants}
+                >
+                  Добавить
+                </Button>
               </div>
-            ) : availableClients.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <User className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Нет доступных заказчиков</p>
+            </TabsContent>
+
+            <TabsContent value="new" className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="client-first-name">Имя *</Label>
+                  <Input
+                    id="client-first-name"
+                    placeholder="Иван"
+                    value={newUserFirstName}
+                    onChange={(e) => setNewUserFirstName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client-last-name">Фамилия</Label>
+                  <Input
+                    id="client-last-name"
+                    placeholder="Иванов"
+                    value={newUserLastName}
+                    onChange={(e) => setNewUserLastName(e.target.value)}
+                  />
+                </div>
               </div>
-            ) : (
+              
               <div className="space-y-2">
-                <Label>Выберите заказчика *</Label>
-                <Select value={selectedParticipantId} onValueChange={setSelectedParticipantId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Выберите из списка" />
+                <Label htmlFor="client-email">Email</Label>
+                <Input
+                  id="client-email"
+                  type="email"
+                  placeholder="ivan@company.ru"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="client-telegram">Telegram</Label>
+                <Input
+                  id="client-telegram"
+                  placeholder="@username"
+                  value={newUserTelegram}
+                  onChange={(e) => setNewUserTelegram(e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="client-department">Отдел</Label>
+                <Select value={newUserDepartment} onValueChange={setNewUserDepartment}>
+                  <SelectTrigger id="client-department">
+                    <SelectValue placeholder="Выберите отдел" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableClients.map((participant: any) => (
-                      <SelectItem key={participant.id} value={participant.id.toString()}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {participant.firstName} {participant.lastName}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {participant.email} {participant.departmentName ? `• ${participant.departmentName}` : ''}
-                          </span>
-                        </div>
+                    {departments.map((dept: any) => (
+                      <SelectItem key={dept.id} value={dept.code}>
+                        {dept.name} ({dept.code})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
-          </div>
-          <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              onClick={() => { 
-                setIsAddClientOpen(false); 
-                setSelectedParticipantId('');
-              }} 
-              className="flex-1"
-            >
-              Отмена
-            </Button>
-            <Button 
-              onClick={handleAddClient} 
-              className="flex-1"
-              disabled={!selectedParticipantId || isLoadingParticipants}
-            >
-              Добавить
-            </Button>
-          </div>
+              
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => { 
+                    setIsAddClientOpen(false); 
+                    resetNewUserForm();
+                  }} 
+                  className="flex-1"
+                >
+                  Отмена
+                </Button>
+                <Button 
+                  onClick={handleCreateClient} 
+                  className="flex-1"
+                  disabled={!newUserFirstName.trim() || isCreatingUser}
+                >
+                  {isCreatingUser ? 'Создание...' : 'Создать'}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 

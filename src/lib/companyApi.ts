@@ -719,6 +719,47 @@ export async function addParticipant(companyId: string, data: {
 }
 
 /**
+ * Добавить участника в проект
+ */
+export async function addParticipantToProject(companyId: string, projectId: string, participantId: number, roleProject: 'member' | 'manager' = 'member') {
+  console.log('📤 Adding participant to project:', { companyId, projectId, participantId, roleProject });
+  
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}/participants`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ participantId, roleProject })
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    console.error('❌ Server error:', error);
+    throw new Error(error.error || 'Failed to add participant to project');
+  }
+  
+  return response.json();
+}
+
+/**
+ * Удалить участника из проекта
+ */
+export async function removeParticipantFromProject(companyId: string, projectId: string, participantId: number) {
+  console.log('📤 Removing participant from project:', { companyId, projectId, participantId });
+  
+  const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}/projects/${projectId}/participants/${participantId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    console.error('❌ Server error:', error);
+    throw new Error(error.error || 'Failed to remove participant from project');
+  }
+  
+  return response.json();
+}
+
+/**
  * Получить список отделов
  */
 export async function getDepartments(): Promise<any> {

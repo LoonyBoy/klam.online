@@ -18,42 +18,51 @@ export function Dashboard({ onNavigateToProject }: DashboardProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    let isMounted = true;
+    
+    const loadData = async () => {
+      try {
+        const companyId = localStorage.getItem('companyId');
+        if (!companyId) {
+          console.error('❌ No company ID found');
+          if (isMounted) setIsLoading(false);
+          return;
+        }
 
-  const loadDashboardData = async () => {
-    try {
-      const companyId = localStorage.getItem('companyId');
-      if (!companyId) {
-        console.error('❌ No company ID found');
-        setIsLoading(false);
-        return;
+        console.log('📤 Loading dashboard data...');
+        
+        // Загружаем все данные параллельно
+        const [companyResponse, projectsResponse, remarksResponse, deadlinesResponse, eventsResponse] = await Promise.all([
+          companyApi.getCompany(companyId),
+          companyApi.getCompanyProjects(companyId),
+          companyApi.getAlbumsStatistics(companyId),
+          companyApi.getUpcomingDeadlines(companyId, 5),
+          companyApi.getRecentEvents(companyId, 6)
+        ]);
+        
+        // Проверяем, что компонент всё ещё смонтирован перед обновлением состояния
+        if (isMounted) {
+          setCompanyData(companyResponse.company);
+          setProjects(projectsResponse.projects || []);
+          setActiveRemarks(remarksResponse.activeRemarks || 0);
+          setDeadlines(deadlinesResponse || []);
+          setEvents(eventsResponse || []);
+          
+          console.log('✅ Dashboard data loaded');
+        }
+      } catch (error) {
+        console.error('❌ Failed to load dashboard data:', error);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-
-      console.log('📤 Loading dashboard data...');
-      
-      // Загружаем все данные параллельно
-      const [companyResponse, projectsResponse, remarksResponse, deadlinesResponse, eventsResponse] = await Promise.all([
-        companyApi.getCompany(companyId),
-        companyApi.getCompanyProjects(companyId),
-        companyApi.getAlbumsStatistics(companyId),
-        companyApi.getUpcomingDeadlines(companyId, 5),
-        companyApi.getRecentEvents(companyId, 6)
-      ]);
-      
-      setCompanyData(companyResponse.company);
-      setProjects(projectsResponse.projects || []);
-      setActiveRemarks(remarksResponse.activeRemarks || 0);
-      setDeadlines(deadlinesResponse || []);
-      setEvents(eventsResponse || []);
-      
-      console.log('✅ Dashboard data loaded');
-    } catch (error) {
-      console.error('❌ Failed to load dashboard data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+    
+    loadData();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Подсчет статистики из реальных данных
   // Проект считается активным, если его статус не 'pause' и не 'archive'
