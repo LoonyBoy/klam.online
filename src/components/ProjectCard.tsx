@@ -24,9 +24,14 @@ import {
   Play,
   Pause,
   Archive,
-  UserPlus
+  UserPlus,
+  Album,
+  AlertCircle,
+  Clock,
+  TrendingUp,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
-import { mockEvents } from '../lib/mockData';
 import { toast } from 'sonner';
 import { companyApi, addParticipant, getDepartments, addParticipantToProject, removeParticipantFromProject } from '../lib/companyApi';
 
@@ -58,11 +63,49 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   
   // Состояние для альбомов из API
   const [projectAlbums, setProjectAlbums] = useState<any[]>([]);
-  const projectEvents = mockEvents.filter(e => e.projectId === projectId).slice(0, 8);
+  
+  // Состояние для событий проекта
+  const [projectEvents, setProjectEvents] = useState<any[]>([]);
   
   // Фильтрация альбомов по категории
   const pdAlbums = projectAlbums.filter(a => a.category === 'СВОК ПД');
   const rdAlbums = projectAlbums.filter(a => a.category === 'СВОК РД');
+  
+  // Вычисляем статистику по проекту
+  const albumsInWork = projectAlbums.filter(a => 
+    a.status?.code === 'in_progress' || a.status?.code === 'sent'
+  ).length;
+  
+  const albumsWithRemarks = projectAlbums.filter(a => 
+    a.status?.code === 'remarks'
+  ).length;
+  
+  // Ближайший дедлайн
+  const upcomingDeadlines = projectAlbums
+    .filter(a => a.deadline && new Date(a.deadline) >= new Date())
+    .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+  
+  const nearestDeadline = upcomingDeadlines[0];
+  
+  // Просроченные дедлайны
+  const overdueAlbums = projectAlbums.filter(a => 
+    a.deadline && new Date(a.deadline) < new Date() && 
+    a.status?.code !== 'accepted' && a.status?.code !== 'archived'
+  );
+  
+  // Пагинация для дедлайнов и событий
+  const [deadlinesPage, setDeadlinesPage] = useState(0);
+  const [eventsPage, setEventsPage] = useState(0);
+  const ITEMS_PER_PAGE = 3;
+  
+  // Все дедлайны (просроченные + предстоящие)
+  const allDeadlines = [...overdueAlbums, ...upcomingDeadlines];
+  const totalDeadlinesPages = Math.ceil(allDeadlines.length / ITEMS_PER_PAGE);
+  const paginatedDeadlines = allDeadlines.slice(deadlinesPage * ITEMS_PER_PAGE, (deadlinesPage + 1) * ITEMS_PER_PAGE);
+  
+  // Пагинация событий
+  const totalEventsPages = Math.ceil(projectEvents.length / ITEMS_PER_PAGE);
+  const paginatedEvents = projectEvents.slice(eventsPage * ITEMS_PER_PAGE, (eventsPage + 1) * ITEMS_PER_PAGE);
   
   // Состояние для статуса проекта
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -96,6 +139,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
   useEffect(() => {
     loadProjectDetails();
     loadProjectAlbums();
+    loadProjectEvents();
     loadDepartments();
   }, [projectId]);
 
@@ -120,6 +164,22 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
       }
     } catch (error) {
       console.error('❌ Failed to load project albums:', error);
+    }
+  };
+
+  const loadProjectEvents = async () => {
+    try {
+      const companyId = localStorage.getItem('companyId');
+      if (!companyId) return;
+
+      const response = await companyApi.getFilteredEvents(companyId, { projectId, limit: 6 });
+      
+      if (response.events) {
+        setProjectEvents(response.events);
+        console.log('📊 Loaded project events:', response.events);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load project events:', error);
     }
   };
 
@@ -1149,34 +1209,221 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
         </div>
       </div>
 
-      {/* История событий - компактный дизайн */}
-      {projectEvents.length > 0 && (
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Последние события</h2>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="divide-y divide-gray-100">
-              {projectEvents.map((event) => (
-                <div key={event.id} className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors">
-                  <Badge 
-                    variant={getEventBadgeVariant(event.type)}
-                    className="shrink-0"
-                  >
-                    {event.type}
-                  </Badge>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 truncate">{event.comment}</p>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-500 shrink-0">
-                    <span>{event.user}</span>
-                    <span>•</span>
-                    <span>{formatDateTime(event.date)}</span>
-                  </div>
-                </div>
-              ))}
+      {/* Статистика проекта */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6 md:mb-8">
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs md:text-sm">Всего альбомов</CardTitle>
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+              <FolderOpen className="h-4 w-4 md:h-5 md:w-5 text-white" />
             </div>
-          </div>
-        </div>
-      )}
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl md:text-3xl font-bold text-blue-600">{projectAlbums.length}</div>
+            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+              <TrendingUp className="w-3 h-3" />
+              ПД: {pdAlbums.length}, РД: {rdAlbums.length}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs md:text-sm">В работе</CardTitle>
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
+              <Album className="h-4 w-4 md:h-5 md:w-5 text-white" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl md:text-3xl font-bold text-purple-600">{albumsInWork}</div>
+            <p className="text-xs text-gray-500 mt-1">активных альбомов</p>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs md:text-sm">Замечания</CardTitle>
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
+              <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-white" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl md:text-3xl font-bold text-orange-600">{albumsWithRemarks}</div>
+            <p className="text-xs text-gray-500 mt-1">требуют внимания</p>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs md:text-sm">Ближайший дедлайн</CardTitle>
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center">
+              <Clock className="h-4 w-4 md:h-5 md:w-5 text-white" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {nearestDeadline ? (
+              <>
+                <div className="text-lg md:text-xl font-bold text-red-600">
+                  {formatDate(nearestDeadline.deadline)}
+                </div>
+                <p className="text-xs text-gray-500 mt-1 truncate">{nearestDeadline.name}</p>
+              </>
+            ) : (
+              <>
+                <div className="text-lg md:text-xl font-bold text-gray-400">—</div>
+                <p className="text-xs text-gray-500 mt-1">нет дедлайнов</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Ближайшие дедлайны и Последние события */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Ближайшие дедлайны */}
+        <Card className="shadow-sm">
+          <CardHeader className="bg-gradient-to-r from-orange-50 to-white border-b flex flex-row items-center justify-between py-3 px-4">
+            <CardTitle className="text-lg">Ближайшие дедлайны</CardTitle>
+            {totalDeadlinesPages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setDeadlinesPage(p => Math.max(0, p - 1))}
+                  disabled={deadlinesPage === 0}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-xs text-gray-500 min-w-[3rem] text-center">
+                  {deadlinesPage + 1} / {totalDeadlinesPages}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setDeadlinesPage(p => Math.min(totalDeadlinesPages - 1, p + 1))}
+                  disabled={deadlinesPage >= totalDeadlinesPages - 1}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="p-3">
+            {allDeadlines.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <Clock className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Нет дедлайнов</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {paginatedDeadlines.map((album) => {
+                  const deadline = new Date(album.deadline);
+                  const today = new Date();
+                  const diffDays = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  const isOverdue = diffDays < 0;
+                  
+                  return (
+                    <div 
+                      key={album.id} 
+                      className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-200"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{album.name} ({album.code})</p>
+                        <p className="text-xs text-gray-500 truncate">{album.department?.name || 'Без отдела'}</p>
+                      </div>
+                      <div className="text-right ml-4">
+                        <p className={`text-sm font-medium ${isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
+                          {formatDate(album.deadline)}
+                        </p>
+                        <Badge 
+                          variant={isOverdue ? 'destructive' : diffDays <= 7 ? 'destructive' : 'outline'}
+                          className="text-xs mt-1"
+                        >
+                          {isOverdue ? 'Просрочен' : `${diffDays} дн.`}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Последние события */}
+        <Card className="shadow-sm">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-white border-b flex flex-row items-center justify-between py-3 px-4">
+            <CardTitle className="text-lg">Последние события</CardTitle>
+            {totalEventsPages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setEventsPage(p => Math.max(0, p - 1))}
+                  disabled={eventsPage === 0}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-xs text-gray-500 min-w-[3rem] text-center">
+                  {eventsPage + 1} / {totalEventsPages}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setEventsPage(p => Math.min(totalEventsPages - 1, p + 1))}
+                  disabled={eventsPage >= totalEventsPages - 1}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="p-3">
+            {projectEvents.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <Calendar className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Нет событий</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {paginatedEvents.map((event) => (
+                  <div 
+                    key={event.id} 
+                    className="p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 mb-0.5">{event.album?.name}</p>
+                        <p className="text-xs text-gray-600">{event.album?.code}</p>
+                      </div>
+                      <Badge 
+                        variant={getEventBadgeVariant(event.status?.code)}
+                        className="shrink-0"
+                      >
+                        {event.status?.name || event.status?.code}
+                      </Badge>
+                    </div>
+                    {event.comment && (
+                      <p className="text-sm text-gray-700 mb-2">{event.comment}</p>
+                    )}
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>{event.createdBy?.firstName} {event.createdBy?.lastName}</span>
+                      <span>•</span>
+                      <span>{event.createdBy?.role === 'executor' ? 'Исполнитель' : event.createdBy?.role === 'customer' ? 'Заказчик' : 'Система'}</span>
+                      <span>•</span>
+                      <span>{formatDateTime(event.createdAt)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

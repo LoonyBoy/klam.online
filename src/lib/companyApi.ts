@@ -302,6 +302,31 @@ export const companyApi = {
     return response.json();
   },
 
+  // Получить события с фильтрацией
+  async getFilteredEvents(companyId: string, filters: {
+    projectId?: string;
+    limit?: number;
+  }): Promise<{ events: any[]; total: number }> {
+    const params = new URLSearchParams();
+    if (filters.projectId) params.append('projectId', filters.projectId);
+    if (filters.limit) params.append('limit', filters.limit.toString());
+    
+    const response = await fetch(
+      `${API_BASE_URL}/api/companies/${companyId}/reports/events?${params.toString()}`,
+      {
+        method: 'GET',
+        headers: getAuthHeaders()
+      }
+    );
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'Failed to fetch filtered events');
+    }
+    
+    return response.json();
+  },
+
   // Обновить альбом
   async updateAlbum(companyId: string, projectId: string, albumId: string, albumData: {
     name?: string;

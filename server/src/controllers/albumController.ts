@@ -239,7 +239,9 @@ export async function getFilteredEvents(req: Request, res: Response) {
       params.push(userId, userId);
     }
 
-    query += ` ORDER BY ae.created_at DESC LIMIT 100`;
+    // Поддержка limit
+    const limitValue = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
+    query += ` ORDER BY ae.created_at DESC LIMIT ${Math.min(limitValue, 100)}`;
 
     const [events] = await pool.query<RowDataPacket[]>(query, params);
 
