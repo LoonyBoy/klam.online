@@ -167,6 +167,7 @@ export function AlbumsView({
           isLoading={isLoading}
           companyId={localStorage.getItem('companyId') || ''}
           projectId={projectId}
+          category={category}
         />
       </div>
     </div>

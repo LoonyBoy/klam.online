@@ -502,7 +502,7 @@ export function CreateProjectWizard({ isOpen, onClose, onComplete, companyId }: 
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Создание нового проекта</DialogTitle>
           <DialogDescription>

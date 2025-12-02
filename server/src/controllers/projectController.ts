@@ -371,10 +371,21 @@ export async function createProject(req: Request, res: Response) {
     console.error('❌ Error in createProject:', error);
     console.error('❌ Stack:', error instanceof Error ? error.stack : 'No stack');
     
+    // Проверяем на дублирование кода проекта
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('uq_projects_company_code') || errorMessage.includes('Duplicate entry')) {
+      res.status(409).json({
+        success: false,
+        error: 'Проект с таким кодом уже существует',
+        details: 'Пожалуйста, выберите другой код проекта'
+      });
+      return;
+    }
+    
     res.status(500).json({
       success: false,
       error: 'Failed to create project',
-      details: error instanceof Error ? error.message : String(error)
+      details: errorMessage
     });
   } finally {
     connection.release();

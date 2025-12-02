@@ -18,8 +18,12 @@ import {
   X,
   Edit,
   Save,
-  Trash2
+  Trash2,
+  Upload,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { companyApi } from '../lib/companyApi';
 import { toast } from 'sonner';
 
@@ -35,6 +39,7 @@ interface AlbumsTableProps {
   onRetry?: () => void;
   companyId?: string;
   projectId?: string;
+  category?: 'СВОК ПД' | 'СВОК РД';
 }
 
 export function AlbumsTable({ 
@@ -48,7 +53,8 @@ export function AlbumsTable({
   error = null,
   onRetry,
   companyId,
-  projectId
+  projectId,
+  category = 'СВОК ПД'
 }: AlbumsTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
@@ -76,6 +82,14 @@ export function AlbumsTable({
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingAlbums, setEditingAlbums] = useState<Record<string, Partial<Album>>>({});
   
+  // Import state
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+
   // Quick add state
   const [isQuickAdding, setIsQuickAdding] = useState(false);
   const [quickAddData, setQuickAddData] = useState({
@@ -356,6 +370,217 @@ export function AlbumsTable({
   }, [albums]);
 
   const statuses = ['all', 'Выгрузка', 'Отправлено', 'Принято', 'Ожидание', 'Замечания', 'В производстве'];
+
+  // Parse CSV file
+  const parseCSV = (text: string): any[] => {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return [];
+    
+    // Parse header - support both comma and semicolon as delimiters
+    const delimiter = lines[0].includes(';') ? ';' : ',';
+    const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase().replace(/"/g, ''));
+    
+    // Map headers to expected fields
+    const headerMap: Record<string, string> = {
+      'название': 'name',
+      'наименование': 'name',
+      'наименование альбома': 'name',
+      'name': 'name',
+      'шифр': 'code',
+      'шифр альбома': 'code',
+      'код': 'code',
+      'code': 'code',
+      'отдел': 'department',
+      'department': 'department',
+      'дедлайн': 'deadline',
+      'срок': 'deadline',
+      'deadline': 'deadline',
+      'ссылка': 'link',
+      'внешняя ссылка': 'link',
+      'link': 'link',
+      'локальная ссылка': 'localLink',
+      'внутренняя ссылка': 'localLink',
+      'locallink': 'localLink',
+      'комментарий': 'comment',
+      'comment': 'comment'
+    };
+
+    const result: any[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      // Skip comment lines
+      if (lines[i].trim().startsWith('#')) continue;
+      
+      const values = lines[i].split(delimiter).map(v => v.trim().replace(/"/g, ''));
+      if (values.length === 0 || values.every(v => !v)) continue;
+      
+      const row: any = {};
+      headers.forEach((header, index) => {
+        const field = headerMap[header];
+        if (field && values[index]) {
+          row[field] = values[index];
+        }
+      });
+      
+      if (row.name || row.code) {
+        result.push(row);
+      }
+    }
+    
+    return result;
+  };
+
+  // Handle file upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setImportFile(file);
+    setImportErrors([]);
+    
+    try {
+      const text = await file.text();
+      let data: any[] = [];
+      
+      if (file.name.endsWith('.csv') || file.name.endsWith('.txt')) {
+        data = parseCSV(text);
+      } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        // For Excel files, we'll use a simple approach - ask user to save as CSV
+        toast.error('Пожалуйста, сохраните Excel файл как CSV и загрузите снова');
+        setImportFile(null);
+        return;
+      }
+      
+      if (data.length === 0) {
+        toast.error('Не удалось распознать данные в файле');
+        setImportFile(null);
+        return;
+      }
+      
+      setImportData(data);
+      toast.success(`Найдено ${data.length} альбомов для импорта`);
+    } catch (error) {
+      console.error('Error parsing file:', error);
+      toast.error('Ошибка при чтении файла');
+      setImportFile(null);
+    }
+  };
+
+  // Perform import
+  const handleImport = async () => {
+    if (!companyId || !projectId || importData.length === 0) return;
+    
+    setIsImporting(true);
+    setImportProgress({ current: 0, total: importData.length });
+    setImportErrors([]);
+    
+    const errors: string[] = [];
+    let successCount = 0;
+    
+    for (let i = 0; i < importData.length; i++) {
+      const row = importData[i];
+      setImportProgress({ current: i + 1, total: importData.length });
+      
+      try {
+        // Find department by code (e.g., "КР", "АР", "ОВВК")
+        let departmentId: number | undefined;
+        if (row.department) {
+          const dept = projectDepartments.find((d: any) => 
+            d.code?.toLowerCase() === row.department.toLowerCase() ||
+            d.name?.toLowerCase() === row.department.toLowerCase()
+          );
+          if (dept) {
+            departmentId = dept.id;
+          } else {
+            // Department specified but not found - show error
+            const availableDepts = projectDepartments.map((d: any) => d.code).join(', ');
+            errors.push(`Строка ${i + 2}: Отдел "${row.department}" не найден. Доступные: ${availableDepts}`);
+            continue;
+          }
+        } else {
+          // No department specified - use first one
+          departmentId = projectDepartments[0]?.id;
+        }
+        
+        if (!departmentId) {
+          errors.push(`Строка ${i + 2}: Не указан отдел для "${row.name || row.code}"`);
+          continue;
+        }
+        
+        // Parse deadline from DD.MM.YYYY or YYYY-MM-DD format
+        let deadline: string | undefined;
+        if (row.deadline) {
+          const dateStr = row.deadline.trim();
+          if (dateStr.includes('.')) {
+            // DD.MM.YYYY format
+            const [day, month, year] = dateStr.split('.');
+            if (day && month && year) {
+              deadline = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+          } else if (dateStr.includes('-')) {
+            // YYYY-MM-DD format
+            deadline = dateStr;
+          }
+        }
+        
+        await companyApi.createAlbum(companyId, projectId, {
+          name: row.name || row.code || 'Без названия',
+          code: row.code || '',
+          category: category,
+          departmentId,
+          deadline: deadline,
+          link: row.link || undefined,
+          localLink: row.localLink || undefined,
+          comment: row.comment || undefined
+        });
+        
+        successCount++;
+      } catch (error: any) {
+        errors.push(`Строка ${i + 1}: ${error.message || 'Ошибка создания'}`);
+      }
+    }
+    
+    setImportErrors(errors);
+    setIsImporting(false);
+    
+    if (successCount > 0) {
+      toast.success(`Импортировано ${successCount} из ${importData.length} альбомов`);
+      // Refresh albums
+      if (onRetry) onRetry();
+    }
+    
+    if (errors.length === 0) {
+      setIsImportDialogOpen(false);
+      setImportFile(null);
+      setImportData([]);
+    }
+  };
+
+  // Download template
+  const downloadTemplate = () => {
+    // Create header with all fields
+    let template = 'Наименование альбома;Шифр альбома;Отдел;Дедлайн;Внешняя ссылка;Локальная ссылка;Комментарий\n';
+    
+    // Add example rows with real departments from project
+    projectDepartments.forEach((d: any, index: number) => {
+      template += `Пример альбома ${index + 1};${d.code}-01;${d.code};31.12.2025;https://example.com;\\\\server\\folder;Комментарий\n`;
+    });
+    
+    // Add comment section with available department codes
+    template += '\n# Доступные коды отделов:\n';
+    projectDepartments.forEach((d: any) => {
+      template += `# ${d.code} - ${d.name}\n`;
+    });
+    template += '\n# Формат дедлайна: ДД.ММ.ГГГГ или ГГГГ-ММ-ДД\n';
+    
+    const blob = new Blob(['\ufeff' + template], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'albums_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Filter templates by project departments
   const filteredTemplates = useMemo(() => {
@@ -847,19 +1072,151 @@ export function AlbumsTable({
     
     // Show empty state with button
     return (
-      <div className="rounded-lg border border-gray-200 p-12 text-center bg-white">
-        <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <FolderOpen className="w-12 h-12 text-gray-400" />
+      <>
+        <div className="rounded-lg border border-gray-200 p-12 text-center bg-white">
+          <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FolderOpen className="w-12 h-12 text-gray-400" />
+          </div>
+          <h3 className="text-gray-900 mb-2">Нет альбомов</h3>
+          <p className="text-gray-500 text-sm mb-6">Создайте первый альбом для проекта или импортируйте из CSV</p>
+          <div className="flex items-center justify-center gap-3">
+            {onQuickAdd && (
+              <Button onClick={() => setIsQuickAdding(true)} className="gap-2">
+                <Plus className="w-4 h-4" />
+                Создать альбом
+              </Button>
+            )}
+            <Button onClick={() => setIsImportDialogOpen(true)} variant="outline" className="gap-2">
+              <Upload className="w-4 h-4" />
+              Импорт из CSV
+            </Button>
+          </div>
         </div>
-        <h3 className="text-gray-900 mb-2">Нет альбомов</h3>
-        <p className="text-gray-500 text-sm mb-6">Создте первый альбом для проекта</p>
-        {onQuickAdd && (
-          <Button onClick={() => setIsQuickAdding(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Создать альбом
-          </Button>
-        )}
-      </div>
+
+        {/* Import Dialog for empty state */}
+        <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+          <DialogContent className="max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                Импорт альбомов
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* Two column layout */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Left: Download template */}
+                <button
+                  onClick={downloadTemplate}
+                  className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors group"
+                >
+                  <Download className="w-8 h-8 text-gray-400 group-hover:text-blue-500" />
+                  <span className="text-sm font-medium text-gray-600 group-hover:text-blue-600">Скачать шаблон</span>
+                </button>
+                
+                {/* Right: Upload file */}
+                <label className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-lg hover:border-green-400 hover:bg-green-50 transition-colors cursor-pointer group">
+                  <Upload className="w-8 h-8 text-gray-400 group-hover:text-green-500" />
+                  <span className="text-sm font-medium text-gray-600 group-hover:text-green-600">
+                    {importFile ? importFile.name : 'Загрузить CSV'}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".csv,.txt"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              
+              {/* Preview */}
+              {importData.length > 0 && (
+                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-green-800">
+                      ✓ Готово к импорту: {importData.length} альбомов
+                    </span>
+                  </div>
+                  <div className="max-h-24 overflow-auto text-xs text-green-700">
+                    {importData.slice(0, 5).map((row, i) => (
+                      <div key={i} className="truncate">
+                        {row.code} — {row.name || 'Без названия'}
+                      </div>
+                    ))}
+                    {importData.length > 5 && (
+                      <div className="text-green-600 italic">... и ещё {importData.length - 5}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Progress */}
+              {isImporting && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>Импорт...</span>
+                    <span>{importProgress.current} / {importProgress.total}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all"
+                      style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* Errors */}
+              {importErrors.length > 0 && (
+                <div className="p-3 bg-red-50 rounded-lg border border-red-200 max-h-24 overflow-y-auto">
+                  <div className="flex items-center gap-2 text-red-800 font-medium text-sm mb-1">
+                    <AlertCircle className="w-4 h-4" />
+                    Ошибки ({importErrors.length})
+                  </div>
+                  <ul className="text-xs text-red-700 space-y-1">
+                    {importErrors.slice(0, 3).map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setIsImportDialogOpen(false);
+                  setImportFile(null);
+                  setImportData([]);
+                  setImportErrors([]);
+                }}
+              >
+                Отмена
+              </Button>
+              <Button 
+                onClick={handleImport}
+                disabled={importData.length === 0 || isImporting}
+                className="gap-2"
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Импорт...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    Импортировать {importData.length > 0 && `(${importData.length})`}
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
@@ -922,6 +1279,15 @@ export function AlbumsTable({
             ))}
           </SelectContent>
         </Select>
+
+        <Button 
+          onClick={() => setIsImportDialogOpen(true)}
+          variant="outline"
+          className="gap-2"
+        >
+          <Upload className="w-4 h-4" />
+          Импорт
+        </Button>
 
         <Button 
           onClick={() => {
@@ -1617,6 +1983,130 @@ export function AlbumsTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+              Импорт альбомов
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Two column layout */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Left: Download template */}
+              <button
+                onClick={downloadTemplate}
+                className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors group"
+              >
+                <Download className="w-8 h-8 text-gray-400 group-hover:text-blue-500" />
+                <span className="text-sm font-medium text-gray-600 group-hover:text-blue-600">Скачать шаблон</span>
+              </button>
+              
+              {/* Right: Upload file */}
+              <label className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-lg hover:border-green-400 hover:bg-green-50 transition-colors cursor-pointer group">
+                <Upload className="w-8 h-8 text-gray-400 group-hover:text-green-500" />
+                <span className="text-sm font-medium text-gray-600 group-hover:text-green-600 text-center">
+                  {importFile ? importFile.name : 'Загрузить CSV'}
+                </span>
+                <input
+                  type="file"
+                  accept=".csv,.txt"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            
+            {/* Preview */}
+            {importData.length > 0 && (
+              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-green-800">
+                    ✓ Готово к импорту: {importData.length} альбомов
+                  </span>
+                </div>
+                <div className="max-h-24 overflow-auto text-xs text-green-700">
+                  {importData.slice(0, 5).map((row, i) => (
+                    <div key={i} className="truncate">
+                      {row.code} — {row.name || 'Без названия'}
+                    </div>
+                  ))}
+                  {importData.length > 5 && (
+                    <div className="text-green-600 italic">... и ещё {importData.length - 5}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* Progress */}
+            {isImporting && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span>Импорт...</span>
+                  <span>{importProgress.current} / {importProgress.total}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all"
+                    style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            
+            {/* Errors */}
+            {importErrors.length > 0 && (
+              <div className="p-3 bg-red-50 rounded-lg border border-red-200 max-h-32 overflow-y-auto">
+                <div className="flex items-center gap-2 text-red-800 font-medium text-sm mb-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Ошибки ({importErrors.length})
+                </div>
+                <ul className="text-xs text-red-700 space-y-1">
+                  {importErrors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex justify-end gap-3 pt-2">
+            <Button 
+              variant="outline"
+              size="sm" 
+              onClick={() => {
+                setIsImportDialogOpen(false);
+                setImportFile(null);
+                setImportData([]);
+                setImportErrors([]);
+              }}
+            >
+              Отмена
+            </Button>
+            <Button 
+              onClick={handleImport}
+              disabled={importData.length === 0 || isImporting}
+              className="gap-2"
+            >
+              {isImporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Импорт...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  Импортировать {importData.length > 0 && `(${importData.length})`}
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
