@@ -671,13 +671,12 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
             </div>
           </div>
         )}
-      </div>
 
-      {/* Участники проекта */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* Исполнители */}
-        <Card className="shadow-sm border-gray-200">
-          <CardHeader className="bg-gradient-to-r from-blue-50 to-white border-b">
+        {/* Участники проекта */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Исполнители */}
+          <Card className="shadow-sm border-gray-200">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-white border-b">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg flex items-center gap-2">
                 <UsersIcon className="w-5 h-5 text-blue-600" />
@@ -812,6 +811,7 @@ export function ProjectCard({ projectId, onNavigateToAlbumsView, onBack }: Proje
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* Диалог добавления исполнителя */}
